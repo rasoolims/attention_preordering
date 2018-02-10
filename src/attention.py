@@ -60,15 +60,12 @@ class MT:
 
 
     def attend(self, input_mat, state, w1dt):
-        w2 = dy.parameter(self.attention_w2)
-        v = dy.parameter(self.attention_v)
-
         # input_mat: (encoder_state x seqlen) => input vecs concatenated as cols
         # w1dt: (attdim x seqlen)
         # w2dt: (attdim x attdim)
-        w2dt = w2*dy.concatenate(list(state.s()))
+        w2dt = self.attention_w2.expr()*dy.concatenate(list(state.s()))
         # att_weights: (seqlen,) row vector
-        unnormalized = dy.transpose(v * dy.tanh(dy.colwise_add(w1dt, w2dt)))
+        unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized)
         # context: (encoder_state)
         context = input_mat * att_weights
@@ -79,9 +76,6 @@ class MT:
         output = [self.EOS] + output + [self.EOS]
         output = [self.w2int[w] for w in output]
 
-        w = dy.parameter(self.decoder_w)
-        b = dy.parameter(self.decoder_b)
-        w1 = dy.parameter(self.attention_w1)
         input_mat = dy.concatenate_cols(vectors)
         w1dt = None
 
@@ -91,10 +85,10 @@ class MT:
 
         for word in output:
             # w1dt can be computed and cached once for the entire decoding phase
-            w1dt = w1dt or w1 * input_mat
+            w1dt = w1dt or self.attention_w1.expr() * input_mat
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
-            out_vector = w * s.output() + b
+            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
             probs = dy.softmax(out_vector)
             last_output_embeddings = self.output_lookup[word]
             loss.append(-dy.log(dy.pick(probs, word)))
@@ -105,10 +99,6 @@ class MT:
     def generate(self, words, tags):
         embedded = self.embed_sentence(words, tags)
         encoded = self.encode_sentence(embedded)
-
-        w = dy.parameter(self.decoder_w)
-        b = dy.parameter(self.decoder_b)
-        w1 = dy.parameter(self.attention_w1)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
@@ -121,10 +111,10 @@ class MT:
             if count_EOS == 2:
                 break
             # w1dt can be computed and cached once for the entire decoding phase
-            w1dt = w1dt or w1 * input_mat
+            w1dt = w1dt or self.attention_w1.expr() * input_mat
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
-            out_vector = w * s.output() + b
+            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
             probs = dy.softmax(out_vector).vec_value()
             next_word = probs.index(max(probs))
             last_output_embeddings = self.output_lookup[next_word]
