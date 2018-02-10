@@ -72,8 +72,8 @@ class MT:
         return context
 
 
-    def decode(self, vectors, output):
-        output = [self.EOS] + output + [self.EOS]
+    def decode(self, vectors, input, output_index):
+        output = [self.EOS] + [input[o] for o in output_index] + [self.EOS]
         output = [self.w2int[w] for w in output]
 
         input_mat = dy.concatenate_cols(vectors)
@@ -126,18 +126,18 @@ class MT:
         return ' '.join(out)
 
 
-    def get_loss(self, input_words, input_tags, output_words):
+    def get_loss(self, input_words, input_tags, output_index):
         dy.renew_cg()
         embedded = self.embed_sentence(input_words, input_tags)
         encoded = self.encode_sentence(embedded)
-        return self.decode(encoded, output_words)
+        return self.decode(encoded, input_words, output_index)
 
 
     def train(self, train_data, epochs):
         for i in range(epochs):
             random.shuffle(train_data)
             for data in train_data:
-                loss = self.get_loss(data[0][0], data[0][1], [data[0][0][d] for d in data[1]])
+                loss = self.get_loss(data[0][0], data[0][1], data[1])
                 loss_value = loss.value()
                 loss.backward()
                 self.trainer.update()
@@ -145,7 +145,7 @@ class MT:
             if (i+1)%100==0:
                 print(loss_value)
                 print ' '.join(data[0][0])
-                #print ' '.join(data[1])
+                print ' '.join([data[0][0][d] for d in data[1]])
                 print(self.generate(data[0][0], data[0][1]))
                 print '---'
 
