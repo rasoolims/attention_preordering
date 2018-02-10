@@ -146,7 +146,7 @@ class MT:
         start = time.time()
         loss = []
         loss_sum, b = 0,0
-        for data in train_data:
+        for d_i, data in enumerate(train_data):
             loss += self.get_loss(data[0][0], data[0][1], data[1])
             if len(loss)>=batch_size:
                 loss_sum += self.backpropagate(loss)
@@ -154,7 +154,8 @@ class MT:
                 dy.renew_cg()
                 loss = []
                 if b%10 ==0:
-                    print b, 'loss', loss_sum/b ,'time',time.time()-start
+                    progress = round((d_i+1) *100.0/len(train_data), 2)
+                    print 'progress', str(progress),'%', 'loss', loss_sum/b ,'time',time.time()-start
                     start = time.time()
                     loss_sum, b = 0, 0
         if len(loss) >0:
