@@ -1,5 +1,5 @@
 import dynet as dy
-import random
+import random, codecs
 import numpy as np
 
 class MT:
@@ -108,6 +108,7 @@ class MT:
         out = []
         count_EOS = 0
         mask = np.zeros(len(word_ids))
+        mask[-1] = -float('inf')
         decoder_w = dy.transpose(dy.concatenate_cols([self.decoder_w.expr()[w] for w in word_ids]))
         decoder_b = dy.transpose(dy.concatenate_cols([self.decoder_b.expr()[w] for w in word_ids]))
         for i in range(len(words)*2):
@@ -129,41 +130,44 @@ class MT:
                 continue
 
             out.append(words[next_pos-1])
+            if len(out)==len(words):
+                break
         return ' '.join(out)
 
 
     def get_loss(self, input_words, input_tags, output_index):
-        dy.renew_cg()
         embedded, _ = self.embed_sentence(input_words, input_tags)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, input_words, output_index)
 
 
-    def train(self, train_data, epochs, batch_size = 1):
-        for i in range(epochs):
-            random.shuffle(train_data)
-            loss = []
-            for data in train_data:
-                loss += self.get_loss(data[0][0], data[0][1], data[1])
-                if len(loss)>=batch_size:
-                    loss, loss_value = self.backpropagate(loss)
-                    loss = []
-            if len(loss) >0:
-                loss, loss_value = self.backpropagate(loss)
+    def train(self, train_data, dev_data, dev_out, batch_size = 1):
+        random.shuffle(train_data)
+        loss = []
+        loss_sum, b = 0,0
+        for data in train_data:
+            loss += self.get_loss(data[0][0], data[0][1], data[1])
+            if len(loss)>=batch_size:
+                loss_sum +=  self.backpropagate(loss)
+                b+=1
+                dy.renew_cg()
                 loss = []
-
-            if (i+1)%100==0:
-                print(loss_value)
-                print ' '.join(data[0][0])
-                print ' '.join([data[0][0][d] for d in data[1]])
-                print(self.generate(data[0][0], data[0][1]))
-                print '---'
+        if len(loss) >0:
+            loss_sum += self.backpropagate(loss)
+            b += 1
+            dy.renew_cg()
+            loss = []
+        print loss_sum/b
+        output = []
+        for data in dev_data:
+            output.append(self.generate(data[0][0], data[0][1]))
+        codecs.open(dev_out, 'w').write('\n'.join(output))
 
     def backpropagate(self, loss):
         loss = dy.esum(loss) / len(loss)
         loss_value = loss.value()
         loss.backward()
         self.trainer.update()
-        return loss, loss_value
+        return loss_value
 
 
