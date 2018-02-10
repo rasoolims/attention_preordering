@@ -40,8 +40,8 @@ class MT:
     def embed_sentence(self, ws, ts):
         words = [self.EOS] + ws + [self.EOS]
         tags = [self.EOS] + ts + [self.EOS]
-        words = [self.w2int[w] for w in words]
-        tags = [self.t2int[t] for t in tags]
+        words = [self.w2int.get(w, 0) for w in words]
+        tags = [self.t2int.get(t, 0) for t in tags]
         return [dy.concatenate([self.wlookup[w], self.tlookup[t]]) for w,t in zip(words, tags)], words
 
 
@@ -75,7 +75,7 @@ class MT:
 
     def decode(self, vectors, input, output_index):
         output = [self.EOS] + [input[o] for o in output_index] + [self.EOS]
-        output = [self.w2int[w] for w in output]
+        output = [self.w2int.get(w, 0) for w in output]
 
         input_mat = dy.concatenate_cols(vectors)
         w1dt = None
@@ -93,7 +93,6 @@ class MT:
             probs = dy.softmax(out_vector)
             last_output_embeddings = self.output_lookup[word]
             loss.append(-dy.log(dy.pick(probs, word)))
-        loss = dy.esum(loss)
         return loss
 
 
@@ -140,14 +139,18 @@ class MT:
         return self.decode(encoded, input_words, output_index)
 
 
-    def train(self, train_data, epochs):
+    def train(self, train_data, epochs, batch_size = 1):
         for i in range(epochs):
             random.shuffle(train_data)
+            loss = []
             for data in train_data:
-                loss = self.get_loss(data[0][0], data[0][1], data[1])
-                loss_value = loss.value()
-                loss.backward()
-                self.trainer.update()
+                loss += self.get_loss(data[0][0], data[0][1], data[1])
+                if len(loss)>=batch_size:
+                    loss, loss_value = self.backpropagate(loss)
+                    loss = []
+            if len(loss) >0:
+                loss, loss_value = self.backpropagate(loss)
+                loss = []
 
             if (i+1)%100==0:
                 print(loss_value)
@@ -155,5 +158,12 @@ class MT:
                 print ' '.join([data[0][0][d] for d in data[1]])
                 print(self.generate(data[0][0], data[0][1]))
                 print '---'
+
+    def backpropagate(self, loss):
+        loss = dy.esum(loss) / len(loss)
+        loss_value = loss.value()
+        loss.backward()
+        self.trainer.update()
+        return loss, loss_value
 
 
