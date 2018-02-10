@@ -1,5 +1,5 @@
 import dynet as dy
-import random, codecs
+import random, codecs, sys
 import numpy as np
 
 class MT:
@@ -148,10 +148,12 @@ class MT:
         for data in train_data:
             loss += self.get_loss(data[0][0], data[0][1], data[1])
             if len(loss)>=batch_size:
-                loss_sum +=  self.backpropagate(loss)
+                loss_sum += self.backpropagate(loss)
                 b+=1
                 dy.renew_cg()
                 loss = []
+                if b%1 ==0:
+                    sys.stdout.write(str(b)+'...')
         if len(loss) >0:
             loss_sum += self.backpropagate(loss)
             b += 1
