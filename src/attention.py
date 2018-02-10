@@ -153,7 +153,7 @@ class MT:
                 b+=1
                 dy.renew_cg()
                 loss = []
-                if b%10 ==0:
+                if b%100 ==0:
                     progress = round((d_i+1) *100.0/len(train_data), 2)
                     print 'progress', str(progress),'%', 'loss', loss_sum/b ,'time',time.time()-start
                     start = time.time()
@@ -176,4 +176,5 @@ class MT:
         self.trainer.update()
         return loss_value
 
-
+#todo unknown training
+#todo position-wise training
