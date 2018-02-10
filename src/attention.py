@@ -137,7 +137,7 @@ class MT:
         for i in range(epochs):
             random.shuffle(train_data)
             for data in train_data:
-                loss = self.get_loss(data[0][0], data[0][1], data[1])
+                loss = self.get_loss(data[0][0], data[0][1], [data[0][0][d] for d in data[1]])
                 loss_value = loss.value()
                 loss.backward()
                 self.trainer.update()
@@ -145,7 +145,7 @@ class MT:
             if (i+1)%100==0:
                 print(loss_value)
                 print ' '.join(data[0][0])
-                print ' '.join(data[1])
+                #print ' '.join(data[1])
                 print(self.generate(data[0][0], data[0][1]))
                 print '---'
 

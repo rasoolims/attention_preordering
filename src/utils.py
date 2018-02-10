@@ -40,6 +40,6 @@ def read_data(train_path, output_path):
     l1 = t1.readline()
     while l1:
         l2 = t2.readline()
-        data.append((get_words_tags(normalize_sent(l1.strip())), get_words_tags(normalize_sent(l2.strip()))[0]))
+        data.append((get_words_tags(normalize_sent(l1.strip())), [int(l)-1 for l in l2.split()]))
         l1 = t1.readline()
     return data
