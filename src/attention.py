@@ -1,5 +1,6 @@
 import dynet as dy
 import random
+import numpy as np
 
 class MT:
     def __init__(self, options, words, tags):
@@ -41,7 +42,7 @@ class MT:
         tags = [self.EOS] + ts + [self.EOS]
         words = [self.w2int[w] for w in words]
         tags = [self.t2int[t] for t in tags]
-        return [dy.concatenate([self.wlookup[w], self.tlookup[t]]) for w,t in zip(words, tags)]
+        return [dy.concatenate([self.wlookup[w], self.tlookup[t]]) for w,t in zip(words, tags)], words
 
 
     def run_lstm(self, init_state, input_vecs):
@@ -97,7 +98,7 @@ class MT:
 
 
     def generate(self, words, tags):
-        embedded = self.embed_sentence(words, tags)
+        embedded, word_ids = self.embed_sentence(words, tags)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
@@ -107,6 +108,9 @@ class MT:
 
         out = []
         count_EOS = 0
+        mask = np.zeros(len(word_ids))
+        decoder_w = dy.transpose(dy.concatenate_cols([self.decoder_w.expr()[w] for w in word_ids]))
+        decoder_b = dy.transpose(dy.concatenate_cols([self.decoder_b.expr()[w] for w in word_ids]))
         for i in range(len(words)*2):
             if count_EOS == 2:
                 break
@@ -114,21 +118,24 @@ class MT:
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
-            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
-            probs = dy.softmax(out_vector).vec_value()
-            next_word = probs.index(max(probs))
+            out_vector = decoder_w * s.output() + decoder_b
+            scores = out_vector.npvalue()
+            scores = np.sum([scores, mask], axis=0)
+            next_pos = np.argmax(scores)
+            next_word = word_ids[next_pos]
             last_output_embeddings = self.output_lookup[next_word]
+            mask[next_pos] = -float('inf')
             if self.int2w[next_word] == self.EOS:
                 count_EOS += 1
                 continue
 
-            out.append(self.int2w[next_word])
+            out.append(words[next_pos-1])
         return ' '.join(out)
 
 
     def get_loss(self, input_words, input_tags, output_index):
         dy.renew_cg()
-        embedded = self.embed_sentence(input_words, input_tags)
+        embedded, _ = self.embed_sentence(input_words, input_tags)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, input_words, output_index)
 
