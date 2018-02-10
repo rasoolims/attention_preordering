@@ -154,8 +154,9 @@ class MT:
                 dy.renew_cg()
                 loss = []
                 if b%10 ==0:
-                    print b, time.time()-start
+                    print b, 'loss', loss_sum/b ,'time',time.time()-start
                     start = time.time()
+                    loss_sum, b = 0, 0
         if len(loss) >0:
             loss_sum += self.backpropagate(loss)
             b += 1
