@@ -1,5 +1,5 @@
 import dynet as dy
-import random, codecs, sys
+import random, codecs, sys, time
 import numpy as np
 
 class MT:
@@ -143,6 +143,7 @@ class MT:
 
     def train(self, train_data, dev_data, dev_out, batch_size = 1):
         random.shuffle(train_data)
+        start = time.time()
         loss = []
         loss_sum, b = 0,0
         for data in train_data:
@@ -152,8 +153,9 @@ class MT:
                 b+=1
                 dy.renew_cg()
                 loss = []
-                if b%1 ==0:
-                    sys.stdout.write(str(b)+'...')
+                if b%10 ==0:
+                    print b, time.time()-start
+                    start = time.time()
         if len(loss) >0:
             loss_sum += self.backpropagate(loss)
             b += 1
