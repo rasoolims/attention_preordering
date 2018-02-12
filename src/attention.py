@@ -120,6 +120,9 @@ class MT:
             s = s.add_input(vector)
             out_vector = decoder_w * s.output() + decoder_b
             scores = out_vector.npvalue()
+            print scores.shape, mask.shape
+            print scores
+            print mask
             scores = np.sum([scores, mask], axis=0)
             next_pos = np.argmax(scores)
             next_word = word_ids[next_pos]
@@ -163,7 +166,6 @@ class MT:
             b += 1
             dy.renew_cg()
             loss = []
-        print loss_sum/b
         output = []
         for data in dev_data:
             output.append(self.generate(data[0][0], data[0][1]))
