@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_option("--outdir", type="string", dest="outdir", default="results")
     parser.add_option("--layer", type="int", dest="layer", default=3)
     parser.add_option("--hdim", type="int", dest="hdim", default=200)
+    parser.add_option("--phdim", type="int", dest="phdim", default=200)
     parser.add_option("--attention", type="int", dest="attention", default=200)
     parser.add_option("--predict", action="store_true", dest="predictFlag", default=False)
     parser.add_option("--eval_non_avg", action="store_true", dest="eval_non_avg", default=False)

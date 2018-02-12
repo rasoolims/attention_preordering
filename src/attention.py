@@ -33,6 +33,9 @@ class MT:
         self.attention_v = self.model.add_parameters( (1, self.ATTENTION_SIZE))
         self.decoder_w = self.model.add_parameters((self.WVOCAB_SIZE, options.hdim))
         self.decoder_b = self.model.add_parameters((self.WVOCAB_SIZE))
+        self.position_h = self.model.add_parameters((options.phdim, options.hdim * 3))
+        self.position_hb = self.model.add_parameters((options.phdim))
+        self.position_decoder = self.model.add_parameters((1, options.phdim))
         self.output_lookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
 
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
@@ -76,7 +79,7 @@ class MT:
     def decode(self, vectors, input, output_index):
         output = [self.EOS] + [input[o] for o in output_index] + [self.EOS]
         output = [self.w2int.get(w, 0) for w in output]
-
+        positions = [0] + [o+1 for o in output_index] + [len(output_index) + 1]
         input_mat = dy.concatenate_cols(vectors)
         w1dt = None
 
@@ -84,15 +87,18 @@ class MT:
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([dy.vecInput(self.hdim*2), last_output_embeddings]))
         loss = []
 
-        for word in output:
+        for p, word in enumerate(output):
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
             out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
             probs = dy.softmax(out_vector)
+            position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform([self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), vectors[i]])])) for i in range(len(output))])
+            position_score = dy.transpose(self.position_decoder.expr()*position_hidden)
             last_output_embeddings = self.output_lookup[word]
             loss.append(-dy.log(dy.pick(probs, word)))
+            loss.append(dy.pickneglogsoftmax(position_score, positions[p]))
         return loss
 
 
@@ -119,7 +125,9 @@ class MT:
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
             out_vector = decoder_w * s.output() + decoder_b
-            scores = out_vector.npvalue().reshape((mask.shape[0],))
+            position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform([self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in range(len(word_ids))])
+            position_scores = dy.transpose(self.position_decoder.expr() * position_hidden)
+            scores = (out_vector+position_scores).npvalue().reshape((mask.shape[0],))
             scores = np.sum([scores, mask], axis=0)
             next_pos = np.argmax(scores)
             next_word = word_ids[next_pos]
@@ -129,7 +137,7 @@ class MT:
                 count_EOS += 1
                 continue
 
-            out.append(words[next_pos-1])
+            out.append(str(next_pos-1))
             if len(out)==len(words):
                 break
         return ' '.join(out)
