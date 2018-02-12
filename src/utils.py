@@ -24,14 +24,15 @@ def get_words_tags(sent):
     return words, tags
 
 def vocab(path):
-    words, tags = set(), set()
+    word_counts = defaultdict(int)
+    tags = set()
     for line in codecs.open(path, 'r'):
         ws, ts = get_words_tags(normalize_sent(line.strip()))
         for w in ws:
-            words.add(w)
+            word_counts[w] += 1
         for t in ts:
             tags.add(t)
-    return list(words), list(tags)
+    return [w for w in word_counts.keys() if word_counts[w]>2], list(tags)
 
 def read_data(train_path, output_path):
     t1 = codecs.open(train_path, 'r')
