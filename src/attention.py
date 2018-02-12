@@ -119,10 +119,7 @@ class MT:
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
             out_vector = decoder_w * s.output() + decoder_b
-            scores = out_vector.npvalue()
-            print scores.shape, mask.shape
-            print scores
-            print mask
+            scores = out_vector.npvalue().reshape((mask.shape[0],))
             scores = np.sum([scores, mask], axis=0)
             next_pos = np.argmax(scores)
             next_word = word_ids[next_pos]
