@@ -164,8 +164,11 @@ class MT:
             dy.renew_cg()
             loss = []
         output = []
-        for data in dev_data:
+        for d, data in enumerate(dev_data):
             output.append(self.generate(data[0][0], data[0][1]))
+            if (d+1)%100==0:
+                sys.stdout.write(str(d+1)+'...')
+        sys.stdout.write(str(d) + '\n')
         codecs.open(dev_out, 'w').write('\n'.join(output))
 
     def backpropagate(self, loss):
