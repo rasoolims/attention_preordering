@@ -187,13 +187,13 @@ class MT:
             b += 1
             dy.renew_cg()
             loss = []
-        output = []
+        writer = codecs.open(dev_out, 'w')
         for d, minibatch in enumerate(dev_batches):
-            output += self.get_output(minibatch)
+            writer.write('\n'.join(self.get_output(minibatch))+'\n')
             if (d + 1) % 10 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
-        codecs.open(dev_out, 'w').write('\n'.join(output))
+        writer.close()
 
     def backpropagate(self, loss):
         loss = dy.esum(loss) / len(loss)
