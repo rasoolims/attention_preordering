@@ -42,6 +42,19 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 words, tags = utils.vocab(options.train_file)
+train_data = utils.read_data(options.train_file, options.train_t)
+max_len = max([len(d[1]) for d in train_data])
+min_len = min([len(d[1]) for d in train_data])
+buckets = [list() for i in range(min_len, max_len)]
+for d in train_data:
+    buckets[len(d[1]) - min_len - 1].append(d)
+dev_buckets = [list()]
+dev_data = utils.read_data(options.dev_file, options.dev_t)
+for d in dev_data:
+    dev_buckets[0].append(d)
+
 t = MT(options, words, tags)
+dev_batches = utils.get_batches(buckets, t, False)
 for i in range(options.epoch):
-    t.train(utils.read_data(options.train_file, options.train_t),utils.read_data(options.dev_file, options.dev_t), options.outdir+'/dev.out'+str(i+1), options.batch)
+    train_batches = utils.get_batches(buckets, t, True)
+    t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
