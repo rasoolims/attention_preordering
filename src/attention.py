@@ -105,8 +105,8 @@ class MT:
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
             loss1 = dy.cmult(dy.pickneglogsoftmax_batch(out_vector, word), mask_tensor)
             loss2 = dy.cmult(dy.pickneglogsoftmax_batch(position_score, output_index[p]), mask_tensor)
-            loss.append(dy.sum_batches(loss1))
-            loss.append(dy.sum_batches(loss2))
+            loss.append(dy.sum_batches(loss1)/loss1.dim()[1])
+            loss.append(dy.sum_batches(loss2)/loss2.dim()[1])
         return loss
 
     def generate(self, minibatch):
@@ -190,7 +190,7 @@ class MT:
         output = []
         for d, minibatch in enumerate(dev_batches):
             output += self.get_output(minibatch)
-            if (d + 1) % 100 == 0:
+            if (d + 1) % 10 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
         codecs.open(dev_out, 'w').write('\n'.join(output))
