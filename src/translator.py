@@ -54,7 +54,8 @@ for d in dev_data:
     dev_buckets[0].append(d)
 
 t = MT(options, words, tags)
-dev_batches = utils.get_batches(buckets, t, False)
+dev_batches = utils.get_batches(dev_buckets, t, False)
 for i in range(options.epoch):
     train_batches = utils.get_batches(buckets, t, True)
     t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
+    print 'dev accuracy', utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))

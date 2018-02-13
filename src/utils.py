@@ -88,6 +88,7 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     output_words = np.array([np.array(
         [model.w2int.get(batch[i][0][0][batch[i][1][j]], 0) if j < len(batch[i][0][0]) else model.PAD for i in
          range(len(batch))]) for j in range(cur_len)])
+
     chars = [list() for _ in range(cur_c_len)]
     # for c_pos in range(cur_c_len):
     #     ch = [model.PAD] * (len(batch) * cur_len)
@@ -101,3 +102,27 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     # chars = np.array(chars) #todo chars
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
     mini_batches.append((words, pos, output_words, positions, masks))
+
+def eval_trigram(gold_file, out_file):
+    r1 = open(gold_file, 'r')
+    r2 = open(out_file, 'r')
+
+    ac_c, all_c = 0.0, 0
+    l1 = r1.readline()
+    while l1:
+        l2 = r2.readline()
+        spl1 = ['<s>', '<s>'] + l1.strip().split() + ['</s>', '</s>']
+        spl2 = ['<s>', '<s>'] + l2.strip().split() + ['</s>', '</s>']
+        assert len(spl1)==len(spl2)
+        gc, oc = set(), set()
+        for i in range(2, len(spl1)-2):
+            s1, s2 = ' '.join(spl1[i:i+3]), ' '.join(spl2[i:i+3])
+            gc.add(s1)
+            oc.add(s2)
+        for s in oc:
+            if s in gc:
+                ac_c += 1
+        all_c += len(spl1)
+
+        l1 = r1.readline()
+    return round(ac_c * 100.0/all_c, 2)
