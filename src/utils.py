@@ -79,14 +79,14 @@ def get_batches(buckets, model, is_train):
 
 def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixed embeddings when added.
     words = np.array([np.array(
-        [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.PAD for i in
+        [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
     pos = np.array([np.array(
-        [model.t2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.PAD for i in
+        [model.t2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.t2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
     positions = np.array([np.array([batch[i][1][j] if j < len(batch[i][1]) else model.PAD for i in range(len(batch))]) for j in range(cur_len)])
     output_words = np.array([np.array(
-        [model.w2int.get(batch[i][0][0][batch[i][1][j]], 0) if j < len(batch[i][0][0]) else model.PAD for i in
+        [model.w2int.get(batch[i][0][0][batch[i][1][j]], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
 
     chars = [list() for _ in range(cur_c_len)]
