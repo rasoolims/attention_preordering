@@ -154,6 +154,7 @@ class MT:
                 mask[position][i] = -float('inf')
                 out[i][p] = position
             last_output_embeddings = dy.lookup_batch(self.output_lookup, next_words)
+        dy.renew_cg()
         return out
 
     def get_loss(self, minibatch):
