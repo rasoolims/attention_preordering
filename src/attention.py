@@ -172,25 +172,18 @@ class MT:
 
     def train(self, train_batches, dev_batches, dev_out, batch_size=1):
         start = time.time()
-        loss = []
         loss_sum, b = 0, 0
         for d_i, minibatch in enumerate(train_batches):
-            loss += self.get_loss(minibatch)
-            if len(loss) >= batch_size:
-                loss_sum += self.backpropagate(loss)
-                b += 1
-                dy.renew_cg()
-                loss = []
-                if b % 10 == 0:
-                    progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
-                    print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
-                    start = time.time()
-                    loss_sum, b = 0, 0
-        if len(loss) > 0:
+            loss = self.get_loss(minibatch)
             loss_sum += self.backpropagate(loss)
             b += 1
             dy.renew_cg()
             loss = []
+            if b % 10 == 0:
+                progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
+                print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
+                start = time.time()
+                loss_sum, b = 0, 0
         writer = codecs.open(dev_out, 'w')
         for d, minibatch in enumerate(dev_batches):
             writer.write('\n'.join(self.get_output(minibatch))+'\n')
