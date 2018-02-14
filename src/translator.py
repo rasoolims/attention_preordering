@@ -59,3 +59,5 @@ for i in range(options.epoch):
     train_batches = utils.get_batches(buckets, t, True)
     t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
     print 'dev accuracy', utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
+    utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+    print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))

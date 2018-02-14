@@ -28,7 +28,7 @@ def get_words_tags(sent, add_eos=True):
         tags.append('<EOS>')
     return words, tags
 
-def vocab(path):
+def vocab(path, min_count=2):
     word_counts = defaultdict(int)
     tags = set()
     for line in codecs.open(path, 'r'):
@@ -37,7 +37,7 @@ def vocab(path):
             word_counts[w] += 1
         for t in ts:
             tags.add(t)
-    return [w for w in word_counts.keys() if word_counts[w]>2], list(tags)
+    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags)
 
 def read_data(train_path, output_path):
     t1 = codecs.open(train_path, 'r')
@@ -104,6 +104,18 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
     mini_batches.append((words, pos, output_words, positions, sen_lens, masks))
 
+def create_string_output_from_order(order_file, dev_file, outfile):
+    lines = codecs.open(order_file, 'r').read().strip().split('\n')
+    dev_lines = codecs.open(dev_file, 'r').read().strip().split('\n')
+    outputs = []
+    for i in range(len(lines)):
+        o = [int(l) for l in lines[i].strip().split()]
+        ws = dev_lines[i].strip().split()
+        words = [ws[j-1] for j in o]
+        outputs.append(' '.join(words))
+
+    writer = open(outfile, 'w').write('\n'.join(outputs))
+
 def eval_trigram(gold_file, out_file):
     r1 = open(gold_file, 'r')
     r2 = open(out_file, 'r')
@@ -123,7 +135,7 @@ def eval_trigram(gold_file, out_file):
         for s in oc:
             if s in gc:
                 ac_c += 1
-        all_c += len(spl1)
+        all_c += len(gc)
 
         l1 = r1.readline()
     return round(ac_c * 100.0/all_c, 2)
