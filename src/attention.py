@@ -110,7 +110,7 @@ class MT:
         return loss
 
     def generate(self, minibatch):
-        words, tags, _, _, masks = minibatch
+        words, tags, _, _, sen_lens, masks = minibatch
         embedded = self.embed_sentence(words, tags)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
@@ -128,8 +128,9 @@ class MT:
         mask[0] = np.array([-float('inf')] * words.shape[1])
         for m1 in range(masks.shape[0]):
             for m2 in range(masks.shape[1]):
-                if masks[m1][m2] == 0:
+                if masks[m1][m2] == 0 or sen_lens[m2] >= m1:
                     mask[m1][m2] = -float('inf')
+
         decoder_w = dy.transpose(dy.concatenate_cols([dy.pick_batch(self.decoder_w.expr(), w) for w in words]))
         decoder_b = dy.transpose(dy.concatenate_cols([dy.pick_batch(self.decoder_b.expr(), w) for w in words]))
 
@@ -155,7 +156,7 @@ class MT:
         return out
 
     def get_loss(self, minibatch):
-        words, tags, output_words, positions, masks = minibatch
+        words, tags, output_words, positions, _, masks = minibatch
         embedded = self.embed_sentence(words, tags)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, output_words, positions, masks)

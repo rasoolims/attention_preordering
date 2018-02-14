@@ -100,8 +100,9 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     #             offset += 1
     #     chars[c_pos] = np.array(ch)
     # chars = np.array(chars) #todo chars
+    sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pos, output_words, positions, masks))
+    mini_batches.append((words, pos, output_words, positions, sen_lens, masks))
 
 def eval_trigram(gold_file, out_file):
     r1 = open(gold_file, 'r')
