@@ -55,13 +55,7 @@ class MT:
         self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * 2))
         self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
-        self.decoder_w = self.model.add_parameters((self.WVOCAB_SIZE, options.hdim))
-        self.decoder_b = self.model.add_parameters((self.WVOCAB_SIZE))
-        self.position_h = self.model.add_parameters((options.phdim, options.hdim * 3))
-        self.position_hb = self.model.add_parameters((options.phdim))
-        self.position_decoder = self.model.add_parameters((1, options.phdim))
         self.output_lookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
-
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
     def embed_sentence(self, ws, pwords, ts, chars):
@@ -106,9 +100,7 @@ class MT:
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized)
-        # context: (encoder_state)
-        context = input_mat * att_weights
-        return context
+        return att_weights
 
     def decode(self, encoded, output_words, output_index, masks):
         input_mat = dy.concatenate_cols(encoded)
@@ -124,18 +116,12 @@ class MT:
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
+            att_weights = self.attend(input_mat, s, w1dt)
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
             s = s.add_input(vector)
-            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
-            # position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
-            #     [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
-            #                                        range(len(output_index))])
-            # position_score = dy.transpose(self.position_decoder.expr() * position_hidden)
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
-            loss1 = dy.cmult(dy.pickneglogsoftmax_batch(out_vector, word), mask_tensor)
-            # loss2 = dy.cmult(dy.pickneglogsoftmax_batch(position_score, output_index[p]), mask_tensor)
-            loss.append(dy.sum_batches(loss1)/loss1.dim()[1])
-            # loss.append(dy.sum_batches(loss2)/loss2.dim()[1])
+            loss_p = dy.cmult(dy.pickneglogsoftmax_batch(att_weights, output_index[p]), mask_tensor)
+            loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
         return loss
 
     def generate(self, minibatch):
@@ -161,22 +147,14 @@ class MT:
                 if sen_lens[m2] - 1 <= m1:
                     mask[m1][m2] = -float('inf')
 
-        decoder_w = dy.transpose(dy.concatenate_cols([dy.pick_batch(self.decoder_w.expr(), w) for w in words]))
-        decoder_b = dy.transpose(dy.concatenate_cols([dy.pick_batch(self.decoder_b.expr(), w) for w in words]))
-
         for p in range(len(words)):
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
+            att_weights = self.attend(input_mat, s, w1dt)
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
             s = s.add_input(vector)
-            out_vector = decoder_w * s.output() + decoder_b
 
-            # position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
-            #     [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
-            #                                        range(len(words))])
-            # position_scores = dy.transpose(self.position_decoder.expr() * position_hidden)
-            # scores = (out_vector + position_scores).npvalue().reshape((mask.shape[0], mask.shape[1]))
-            scores = (out_vector).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             scores = np.sum([scores, first_mask if p == 0 else mask], axis=0)
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
@@ -208,17 +186,17 @@ class MT:
             b += 1
             dy.renew_cg()
             loss = []
-            if b % 10 == 0:
+            if b % 1 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
-                #print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
+                print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
                 start = time.time()
                 loss_sum, b = 0, 0
         writer = codecs.open(dev_out, 'w')
         for d, minibatch in enumerate(dev_batches):
             writer.write('\n'.join(self.get_output(minibatch))+'\n')
-            #if (d + 1) % 10 == 0:
-            #    sys.stdout.write(str(d + 1) + '...')
-        #sys.stdout.write(str(d) + '\n')
+            if (d + 1) % 10 == 0:
+               sys.stdout.write(str(d + 1) + '...')
+        sys.stdout.write(str(d) + '\n')
         writer.close()
 
     def backpropagate(self, loss):
