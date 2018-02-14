@@ -114,7 +114,7 @@ def create_string_output_from_order(order_file, dev_file, outfile):
         words = [ws[j-1] for j in o]
         outputs.append(' '.join(words))
 
-    writer = open(outfile, 'w').write('\n'.join(outputs))
+    open(outfile, 'w').write('\n'.join(outputs))
 
 def eval_trigram(gold_file, out_file):
     r1 = open(gold_file, 'r')
