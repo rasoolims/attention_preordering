@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_option("--params", dest="params", help="Parameters file", metavar="FILE", default="params.pickle")
     parser.add_option("--model", dest="model", help="Load/Save model file", metavar="FILE", default="model")
     parser.add_option("--we", type="int", dest="we", default=100)
-    parser.add_option("--batch", type="int", dest="batch", default=500)
+    parser.add_option("--batch", type="int", dest="batch", default=32)
     parser.add_option("--pe", type="int", dest="pe", default=100)
     parser.add_option("--ce", type="int", dest="ce", default=100)
     parser.add_option("--re", type="int", dest="re", default=25)
@@ -41,23 +41,23 @@ if __name__ == '__main__':
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
 
 (options, args) = parser.parse_args()
-words, tags = utils.vocab(options.train_file)
+words, tags = utils.vocab(options.train_file, 0)
 train_data = utils.read_data(options.train_file, options.train_t)
-max_len = max([len(d[1]) for d in train_data])
-min_len = min([len(d[1]) for d in train_data])
-buckets = [list() for i in range(min_len, max_len)]
-for d in train_data:
-    buckets[len(d[1]) - min_len - 1].append(d)
-dev_buckets = [list()]
 dev_data = utils.read_data(options.dev_file, options.dev_t)
-for d in dev_data:
-    dev_buckets[0].append(d)
-
 t = MT(options, words, tags)
-dev_batches = utils.get_batches(dev_buckets, t, False)
+
 for i in range(options.epoch):
-    train_batches = utils.get_batches(buckets, t, True)
-    t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
-    print 'dev accuracy', utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
-    utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
-    print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+    t.train(train_data, options.batch)
+    if (i+1)%100==0:
+        t.reorder(dev_data, options.outdir+'/dev.out'+str(i+1))
+        utils.create_string_output_from_order(options.outdir + '/dev.out' + str(i + 1), options.dev_file,
+                                      options.outdir + '/dev.str.out' + str(i + 1))
+        print 'dev accuracy', utils.eval_trigram(options.dev_file, options.outdir + '/dev.str.out' + str(i + 1))
+    # print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir + '/dev.str.out' + str(i + 1))
+
+# for i in range(options.epoch):
+#     train_batches = utils.get_batches(buckets, t, True)
+#     t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
+#     print 'dev accuracy', utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
+#     utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+#     print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
