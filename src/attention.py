@@ -4,7 +4,7 @@ import numpy as np
 
 
 class MT:
-    def __init__(self, options, words, tags):
+    def __init__(self, options, words, tags, chars):
         self.EOS = "<EOS>"
         self.PAD = 1
         self.options = options
@@ -14,18 +14,20 @@ class MT:
         self.int2t = ['<unk>', '<pad>'] + tags
         self.w2int = {w: i + 2 for i, w in enumerate(words)}
         self.t2int = {t: i + 2 for i, t in enumerate(tags)}
+        self.c2int = {c: i + 2 for i, c in enumerate(chars)}
         self.WVOCAB_SIZE = len(self.int2w)
         self.TVOCAB_SIZE = len(self.int2t)
 
         self.LSTM_NUM_OF_LAYERS = options.layer
         self.ATTENTION_SIZE = options.attention
         self.hdim = options.hdim
-
         self.model = dy.Model()
 
         input_dim = options.we + options.pe
-        self.encoder_bilstm = dy.BiRNNBuilder(self.LSTM_NUM_OF_LAYERS, input_dim, options.hdim * 2, self.model,
-                                              dy.VanillaLSTMBuilder)
+        self.encoder_bilstm = dy.BiRNNBuilder(self.LSTM_NUM_OF_LAYERS, input_dim, options.hdim * 2, self.model, dy.VanillaLSTMBuilder)
+
+        self.clookup = self.model.add_lookup_parameters((len(chars) + 2, options.ce))
+        self.char_lstm = dy.BiRNNBuilder(1, options.ce, options.we, self.model, dy.VanillaLSTMBuilder)
 
         self.dec_lstm = dy.LSTMBuilder(self.LSTM_NUM_OF_LAYERS, options.hdim * 2 + options.we, options.hdim, self.model)
 
@@ -43,8 +45,16 @@ class MT:
 
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
-    def embed_sentence(self, ws, ts):
-        return [dy.concatenate([dy.lookup_batch(self.wlookup, ws[i]), dy.lookup_batch(self.tlookup, ts[i])]) for i in
+    def embed_sentence(self, ws, ts, chars):
+        cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
+        char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
+                              self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
+        crnn = dy.reshape(dy.concatenate_cols([char_fwd, char_bckd]), (self.options.we, ws.shape[0] * ws.shape[1]))
+        cnn_reps = [list() for _ in range(len(ws))]
+        for i in range(ws.shape[0]):
+            cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
+
+        return [dy.concatenate([dy.lookup_batch(self.wlookup, ws[i]) + cnn_reps[i], dy.lookup_batch(self.tlookup, ts[i])]) for i in
                 range(len(ts))]
 
     def run_lstm(self, init_state, input_vecs):
@@ -110,8 +120,8 @@ class MT:
         return loss
 
     def generate(self, minibatch):
-        words, tags, _, _, sen_lens, masks = minibatch
-        embedded = self.embed_sentence(words, tags)
+        words, tags, _, _, chars, sen_lens, masks = minibatch
+        embedded = self.embed_sentence(words, tags, chars)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
@@ -159,8 +169,8 @@ class MT:
         return out
 
     def get_loss(self, minibatch):
-        words, tags, output_words, positions, _, masks = minibatch
-        embedded = self.embed_sentence(words, tags)
+        words, tags, output_words, positions, chars, _, masks = minibatch
+        embedded = self.embed_sentence(words, tags, chars)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, output_words, positions, masks)
 
@@ -181,15 +191,15 @@ class MT:
             loss = []
             if b % 10 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
-                print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
+                #print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
                 start = time.time()
                 loss_sum, b = 0, 0
         writer = codecs.open(dev_out, 'w')
         for d, minibatch in enumerate(dev_batches):
             writer.write('\n'.join(self.get_output(minibatch))+'\n')
-            if (d + 1) % 10 == 0:
-                sys.stdout.write(str(d + 1) + '...')
-        sys.stdout.write(str(d) + '\n')
+            #if (d + 1) % 10 == 0:
+            #    sys.stdout.write(str(d + 1) + '...')
+        #sys.stdout.write(str(d) + '\n')
         writer.close()
 
     def backpropagate(self, loss):

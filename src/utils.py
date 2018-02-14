@@ -30,14 +30,16 @@ def get_words_tags(sent, add_eos=True):
 
 def vocab(path, min_count=2):
     word_counts = defaultdict(int)
-    tags = set()
+    tags,chars = set(), set()
     for line in codecs.open(path, 'r'):
         ws, ts = get_words_tags(normalize_sent(line.strip()))
         for w in ws:
             word_counts[w] += 1
+            for c in list(w):
+                chars.add(c)
         for t in ts:
             tags.add(t)
-    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags)
+    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags), list(chars)
 
 def read_data(train_path, output_path):
     t1 = codecs.open(train_path, 'r')
@@ -90,19 +92,19 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
          range(len(batch))]) for j in range(cur_len)])
 
     chars = [list() for _ in range(cur_c_len)]
-    # for c_pos in range(cur_c_len):
-    #     ch = [model.PAD] * (len(batch) * cur_len)
-    #     offset = 0
-    #     for w_pos in range(cur_len):
-    #         for sen_position in range(len(batch)):
-    #             if w_pos < len(batch[sen_position]) and c_pos < len(batch[sen_position][0][0][w_pos]):
-    #                 ch[offset] = model.chars.get(batch[sen_position][0][0][w_pos][c_pos], 0)
-    #             offset += 1
-    #     chars[c_pos] = np.array(ch)
-    # chars = np.array(chars) #todo chars
+    for c_pos in range(cur_c_len):
+        ch = [model.PAD] * (len(batch) * cur_len)
+        offset = 0
+        for w_pos in range(cur_len):
+            for sen_position in range(len(batch)):
+                if w_pos < len(batch[sen_position]) and c_pos < len(batch[sen_position][0][0][w_pos]):
+                    ch[offset] = model.c2int.get(batch[sen_position][0][0][w_pos][c_pos], 0)
+                offset += 1
+        chars[c_pos] = np.array(ch)
+    chars = np.array(chars)
     sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pos, output_words, positions, sen_lens, masks))
+    mini_batches.append((words, pos, output_words, positions, chars, sen_lens, masks))
 
 def create_string_output_from_order(order_file, dev_file, outfile):
     lines = codecs.open(order_file, 'r').read().strip().split('\n')
