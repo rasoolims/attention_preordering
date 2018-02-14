@@ -98,15 +98,15 @@ class MT:
             vector = dy.concatenate([self.attend(input_mat, s, w1dt), last_output_embeddings])
             s = s.add_input(vector)
             out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
-            position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
-                [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
-                                                   range(len(output_index))])
-            position_score = dy.transpose(self.position_decoder.expr() * position_hidden)
+            # position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
+            #     [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
+            #                                        range(len(output_index))])
+            # position_score = dy.transpose(self.position_decoder.expr() * position_hidden)
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
             loss1 = dy.cmult(dy.pickneglogsoftmax_batch(out_vector, word), mask_tensor)
-            loss2 = dy.cmult(dy.pickneglogsoftmax_batch(position_score, output_index[p]), mask_tensor)
+            # loss2 = dy.cmult(dy.pickneglogsoftmax_batch(position_score, output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss1)/loss1.dim()[1])
-            loss.append(dy.sum_batches(loss2)/loss2.dim()[1])
+            # loss.append(dy.sum_batches(loss2)/loss2.dim()[1])
         return loss
 
     def generate(self, minibatch):
@@ -142,11 +142,12 @@ class MT:
             s = s.add_input(vector)
             out_vector = decoder_w * s.output() + decoder_b
 
-            position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
-                [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
-                                                   range(len(words))])
-            position_scores = dy.transpose(self.position_decoder.expr() * position_hidden)
-            scores = (out_vector + position_scores).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            # position_hidden = dy.concatenate_cols([dy.tanh(dy.affine_transform(
+            #     [self.position_hb.expr(), self.position_h.expr(), dy.concatenate([s.output(), encoded[i]])])) for i in
+            #                                        range(len(words))])
+            # position_scores = dy.transpose(self.position_decoder.expr() * position_hidden)
+            # scores = (out_vector + position_scores).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            scores = (out_vector).npvalue().reshape((mask.shape[0], mask.shape[1]))
             scores = np.sum([scores, first_mask if p == 0 else mask], axis=0)
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
