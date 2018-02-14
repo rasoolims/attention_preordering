@@ -124,11 +124,12 @@ class MT:
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
         first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
         mask = np.zeros((words.shape[0], words.shape[1]), dtype=float)
-        mask[-1] = np.array([-float('inf')] * words.shape[1])
         mask[0] = np.array([-float('inf')] * words.shape[1])
         for m1 in range(masks.shape[0]):
             for m2 in range(masks.shape[1]):
-                if masks[m1][m2] == 0 or sen_lens[m2] >= m1:
+                if masks[m1][m2] == 0:
+                    mask[m1][m2] = -float('inf')
+                if sen_lens[m2] - 1 <= m1:
                     mask[m1][m2] = -float('inf')
 
         decoder_w = dy.transpose(dy.concatenate_cols([dy.pick_batch(self.decoder_w.expr(), w) for w in words]))
