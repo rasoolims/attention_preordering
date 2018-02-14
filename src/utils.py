@@ -83,6 +83,9 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     words = np.array([np.array(
         [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
+    pwords = np.array([np.array(
+        [model.evocab.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
     pos = np.array([np.array(
         [model.t2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.t2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
@@ -104,7 +107,7 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixe
     chars = np.array(chars)
     sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pos, output_words, positions, chars, sen_lens, masks))
+    mini_batches.append((words, pwords, pos, output_words, positions, chars, sen_lens, masks))
 
 def create_string_output_from_order(order_file, dev_file, outfile):
     lines = codecs.open(order_file, 'r').read().strip().split('\n')

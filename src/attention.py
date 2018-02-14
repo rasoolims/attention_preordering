@@ -1,5 +1,5 @@
 import dynet as dy
-import codecs, sys, time
+import codecs, sys, time, gzip
 import numpy as np
 
 
@@ -23,6 +23,25 @@ class MT:
         self.hdim = options.hdim
         self.model = dy.Model()
 
+        external_embedding_fp = gzip.open(options.external_embedding, 'r')
+        external_embedding = {line.split(' ')[0]: [float(f) for f in line.strip().split(' ')[1:]] for line in
+                              external_embedding_fp if len(line.split(' ')) > 2}
+        external_embedding_fp.close()
+        self.evocab = {word: i + 2 for i, word in enumerate(external_embedding)}
+
+        edim = len(external_embedding.values()[0])
+        assert edim == options.we
+        self.elookup = self.model.add_lookup_parameters((len(external_embedding) + 2, edim))
+        self.elookup.set_updated(False)
+        self.elookup.init_row(0, [0] * edim)
+        for word in external_embedding.keys():
+            self.elookup.init_row(self.evocab[word], external_embedding[word])
+            if word == '_UNK_':
+                self.elookup.init_row(0, external_embedding[word])
+
+        print 'Initialized with pre-trained embedding. Vector dimensions', edim, 'and', len(external_embedding), \
+            'words, number of training words', len(self.w2int) + 2
+
         input_dim = options.we + options.pe
         self.encoder_bilstm = dy.BiRNNBuilder(self.LSTM_NUM_OF_LAYERS, input_dim, options.hdim * 2, self.model, dy.VanillaLSTMBuilder)
 
@@ -45,7 +64,7 @@ class MT:
 
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
-    def embed_sentence(self, ws, ts, chars):
+    def embed_sentence(self, ws, pwords, ts, chars):
         cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
         char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
                               self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
@@ -54,8 +73,8 @@ class MT:
         for i in range(ws.shape[0]):
             cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
 
-        return [dy.concatenate([dy.lookup_batch(self.wlookup, ws[i]) + cnn_reps[i], dy.lookup_batch(self.tlookup, ts[i])]) for i in
-                range(len(ts))]
+        return [dy.concatenate([dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) +
+                                cnn_reps[i], dy.lookup_batch(self.tlookup, ts[i])]) for i in range(len(ts))]
 
     def run_lstm(self, init_state, input_vecs):
         s = init_state
@@ -120,8 +139,8 @@ class MT:
         return loss
 
     def generate(self, minibatch):
-        words, tags, _, _, chars, sen_lens, masks = minibatch
-        embedded = self.embed_sentence(words, tags, chars)
+        words, pwords, tags, _, _, chars, sen_lens, masks = minibatch
+        embedded = self.embed_sentence(words, pwords, tags, chars)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
@@ -169,8 +188,8 @@ class MT:
         return out
 
     def get_loss(self, minibatch):
-        words, tags, output_words, positions, chars, _, masks = minibatch
-        embedded = self.embed_sentence(words, tags, chars)
+        words, pwords, tags, output_words, positions, chars, _, masks = minibatch
+        embedded = self.embed_sentence(words, pwords, tags, chars)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, output_words, positions, masks)
 
