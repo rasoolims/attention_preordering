@@ -220,6 +220,9 @@ class MT:
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
+        for tree in new_trees:
+            writer.write(tree.conll_str())
+            writer.write('\n\n')
         writer.close()
 
     def backpropagate(self, loss):
