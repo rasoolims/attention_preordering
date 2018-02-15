@@ -111,7 +111,6 @@ class MT:
                                   (self.hdim * 2,), len(output_words[0]))
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings]))
         loss = []
-        mask = np.zeros((output_words.shape[0], output_words.shape[1]), dtype=float)
         for p, word in enumerate(output_words):
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
@@ -120,10 +119,8 @@ class MT:
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
             s = s.add_input(vector)
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
-            loss_p = dy.cmult(dy.pickneglogsoftmax_batch(att_weights, output_index[p]), mask_tensor)
+            loss_p = dy.cmult(dy.pick_batch(-dy.log(att_weights), output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
-            for i, position in enumerate(output_index[p]):
-                mask[position][i] = -float('inf')
         return loss
 
     def generate(self, minibatch):
