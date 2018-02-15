@@ -99,7 +99,7 @@ class MT:
         w2dt = self.attention_w2.expr() * dy.concatenate(list(state.s()))
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
-        att_weights = dy.softmax(unnormalized)
+        att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
         return att_weights
 
     def decode(self, encoded, output_words, output_index, masks):
