@@ -185,7 +185,7 @@ class MT:
             b += 1
             dy.renew_cg()
             loss = []
-            if b % 10 == 0:
+            if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
                 print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
                 start = time.time()
@@ -193,7 +193,7 @@ class MT:
         writer = codecs.open(dev_out, 'w')
         for d, minibatch in enumerate(dev_batches):
             writer.write('\n'.join(self.get_output(minibatch))+'\n')
-            if (d + 1) % 10 == 0:
+            if (d + 1) % 100 == 0:
                sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
         writer.close()
