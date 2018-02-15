@@ -138,6 +138,7 @@ class MT:
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
         first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
         mask = np.zeros((words.shape[0], words.shape[1]), dtype=float)
+        first_mask[0] = np.array([0] * words.shape[1])
         mask[0] = np.array([-float('inf')] * words.shape[1])
         for m1 in range(masks.shape[0]):
             for m2 in range(masks.shape[1]):
@@ -154,7 +155,8 @@ class MT:
             s = s.add_input(vector)
 
             scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
-            scores = np.sum([scores, first_mask if p == 0 else mask], axis=0)
+            cur_mask = first_mask if p == 0 else mask
+            scores = np.sum([scores, cur_mask], axis=0)
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
             for i, position in enumerate(next_positions):
@@ -169,6 +171,12 @@ class MT:
         embedded = self.embed_sentence(words, pwords, tags, chars)
         encoded = self.encode_sentence(embedded)
         return self.decode(encoded, output_words, positions, masks)
+
+    def get_output_int(self, minibatch):
+        gen_out, masks = self.generate(minibatch), minibatch[-1]
+        out = [[gen_out[i][j] for j in range(1, len(gen_out[i])) if masks[j][i] == 1] for i in range(len(gen_out))]
+        out = [o[:-1] for o in out]
+        return out
 
     def get_output(self, minibatch):
         gen_out, masks = self.generate(minibatch), minibatch[-1]
@@ -190,11 +198,27 @@ class MT:
                 print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
                 start = time.time()
                 loss_sum, b = 0, 0
-        writer = codecs.open(dev_out, 'w')
-        for d, minibatch in enumerate(dev_batches):
-            writer.write('\n'.join(self.get_output(minibatch))+'\n')
+        self.reorder(dev_batches, dev_out)
+
+    def reorder(self, batches, out_file):
+        writer = codecs.open(out_file, 'w')
+        for d, minibatch in enumerate(batches):
+            writer.write('\n'.join(self.get_output(minibatch)) + '\n')
             if (d + 1) % 100 == 0:
-               sys.stdout.write(str(d + 1) + '...')
+                sys.stdout.write(str(d + 1) + '...')
+        sys.stdout.write(str(d) + '\n')
+        writer.close()
+
+    def reorder_tree(self, batches, trees, out_file):
+        writer = codecs.open(out_file, 'w')
+        print 'get new order'
+        new_trees, t_num = [], 0
+        for d, minibatch in enumerate(batches):
+            for order in self.get_output_int(minibatch):
+                new_trees.append(trees[t_num].reorder(order))
+                t_num += 1
+            if (d + 1) % 100 == 0:
+                sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
         writer.close()
 

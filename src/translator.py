@@ -29,6 +29,7 @@ if __name__ == '__main__':
     parser.add_option("--hdim", type="int", dest="hdim", default=200)
     parser.add_option("--phdim", type="int", dest="phdim", default=200)
     parser.add_option("--attention", type="int", dest="attention", default=200)
+    parser.add_option("--min_freq", type="int", dest="min_freq", default=1)
     parser.add_option("--predict", action="store_true", dest="predictFlag", default=False)
     parser.add_option("--eval_non_avg", action="store_true", dest="eval_non_avg", default=False)
     parser.add_option("--no_anneal", action="store_false", dest="anneal", default=True)
@@ -41,7 +42,7 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    words, tags, chars = utils.vocab(options.train_file, 2)
+    words, tags, chars = utils.vocab(options.train_file, options.min_freq)
     train_data = utils.read_data(options.train_file, options.train_t)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
@@ -53,9 +54,9 @@ if options.train_file:
     for d in dev_data:
         dev_buckets[0].append(d)
 
-    t = MT(options, words, tags, chars)
     with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
         pickle.dump((words, tags, chars, options), paramsfp)
+    t = MT(options, words, tags, chars)
 
     dev_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
@@ -71,3 +72,17 @@ if options.train_file:
                 t.save(os.path.join(options.outdir, options.model))
             utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
             print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+
+if options.test_file and options.output_file:
+    with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
+        words, tags, chars, stored_options = pickle.load(paramsfp)
+    stored_options.external_embedding = options.external_embedding
+    t = MT(stored_options, words, tags, chars)
+    t.load(os.path.join(options.outdir, options.model))
+    test_buckets = [list()]
+    trees, test_data = utils.read_tree_as_data(options.test_file)
+    for d in test_data:
+        test_buckets[0].append(d)
+    t.options.batch = options.batch
+    test_batches = utils.get_batches(test_buckets, t, False)
+    t.reorder_tree(test_batches, trees, options.output_file)

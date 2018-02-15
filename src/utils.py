@@ -1,6 +1,7 @@
 import re, codecs, sys, random
 import numpy as np
 from collections import defaultdict
+from dep_tree import DepTree
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -41,6 +42,18 @@ def vocab(path, min_count=2):
             tags.add(t)
     return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags), list(chars)
 
+
+def read_tree_as_data(tree_path):
+    trees = DepTree.load_trees_from_conll_file(tree_path)
+    data = []
+    for tree in trees:
+        words, tags = tree.lemmas, tree.tags
+        sen = ' '.join([words[i]+'_'+tags[i] for i in range(len(words))])
+        data.append((get_words_tags(normalize_sent(sen)), [0] + [int(l) for l in range(len(words))] + [len(words) + 1]))
+    assert len(data) == len(trees)
+    return trees, data
+
+
 def read_data(train_path, output_path):
     t1 = codecs.open(train_path, 'r')
     t2 = codecs.open(output_path, 'r')
@@ -48,7 +61,8 @@ def read_data(train_path, output_path):
     l1 = t1.readline()
     while l1:
         l2 = t2.readline()
-        data.append((get_words_tags(normalize_sent(l1.strip())), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
+        words, tags = get_words_tags(normalize_sent(l1.strip()))
+        data.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
         l1 = t1.readline()
     return data
 
