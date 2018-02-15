@@ -119,7 +119,7 @@ class MT:
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
             s = s.add_input(vector)
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
-            loss_p = dy.cmult(dy.pick_batch(-dy.log(att_weights), output_index[p]), mask_tensor)
+            loss_p = dy.cmult(dy.pickneglogsoftmax_batch(att_weights, output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
         return loss
 
