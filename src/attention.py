@@ -122,7 +122,7 @@ class MT:
             last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
             loss_p = dy.cmult(dy.pickneglogsoftmax_batch(att_weights, output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
-            for i, position in enumerate(word):
+            for i, position in enumerate(output_index[p]):
                 mask[position][i] = -float('inf')
         return loss
 
