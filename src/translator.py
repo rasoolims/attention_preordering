@@ -1,6 +1,5 @@
 from optparse import OptionParser
-
-import utils
+import utils, os, pickle
 from attention import MT
 
 if __name__ == '__main__':
@@ -41,24 +40,34 @@ if __name__ == '__main__':
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
 
 (options, args) = parser.parse_args()
-words, tags, chars = utils.vocab(options.train_file, 2)
-train_data = utils.read_data(options.train_file, options.train_t)
-max_len = max([len(d[1]) for d in train_data])
-min_len = min([len(d[1]) for d in train_data])
-buckets = [list() for i in range(min_len, max_len)]
-for d in train_data:
-    buckets[len(d[1]) - min_len - 1].append(d)
-dev_buckets = [list()]
-dev_data = utils.read_data(options.dev_file, options.dev_t)
-for d in dev_data:
-    dev_buckets[0].append(d)
+if options.train_file:
+    words, tags, chars = utils.vocab(options.train_file, 2)
+    train_data = utils.read_data(options.train_file, options.train_t)
+    max_len = max([len(d[1]) for d in train_data])
+    min_len = min([len(d[1]) for d in train_data])
+    buckets = [list() for i in range(min_len, max_len)]
+    for d in train_data:
+        buckets[len(d[1]) - min_len - 1].append(d)
+    dev_buckets = [list()]
+    dev_data = utils.read_data(options.dev_file, options.dev_t)
+    for d in dev_data:
+        dev_buckets[0].append(d)
 
-t = MT(options, words, tags, chars)
-dev_batches = utils.get_batches(dev_buckets, t, False)
-for i in range(options.epoch):
-    train_batches = utils.get_batches(buckets, t, True)
-    t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
-    if (i+1)%1==0:
-        print 'dev accuracy', utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
-        utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
-        print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+    t = MT(options, words, tags, chars)
+    with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
+        pickle.dump((words, tags, chars, options), paramsfp)
+
+    dev_batches = utils.get_batches(dev_buckets, t, False)
+    best_dev = 0
+    for i in range(options.epoch):
+        train_batches = utils.get_batches(buckets, t, True)
+        t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
+        if (i+1)%1==0:
+            dev_ac = utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
+            print 'dev accuracy', dev_ac
+            if dev_ac > best_dev:
+                best_dev = dev_ac
+                print 'saving', best_dev
+                t.save(os.path.join(options.outdir, options.model))
+            utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
+            print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))

@@ -204,3 +204,9 @@ class MT:
         loss.backward()
         self.trainer.update()
         return loss_value
+
+    def save(self, filename):
+        self.model.save(filename)
+
+    def load(self, filename):
+        self.model.populate(filename)
