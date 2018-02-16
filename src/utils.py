@@ -29,11 +29,11 @@ def get_words_tags(sent, add_eos=True):
         tags.append('<EOS>')
     return words, tags
 
-def vocab(path, min_count=2):
+def vocab(train_data, min_count=2):
     word_counts = defaultdict(int)
     tags,chars = set(), set()
-    for line in codecs.open(path, 'r'):
-        ws, ts = get_words_tags(normalize_sent(line.strip()))
+    for data in train_data:
+        ws, ts = data[0]
         for w in ws:
             word_counts[w] += 1
             for c in list(w):
@@ -65,6 +65,21 @@ def read_data(train_path, output_path):
         data.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
         l1 = t1.readline()
     return data
+
+def split_data(train_path, output_path):
+    t1 = codecs.open(train_path, 'r')
+    t2 = codecs.open(output_path, 'r')
+    tdata, ddata = [], []
+    l1 = t1.readline()
+    while l1:
+        l2 = t2.readline()
+        words, tags = get_words_tags(normalize_sent(l1.strip()))
+        if random.randint(0, 9)==9:
+            ddata.append(((words, tags), [0] + [int(l) for l in l2.split()] + [len(l2.split()) + 1]))
+        else:
+            tdata.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
+        l1 = t1.readline()
+    return tdata, ddata
 
 
 def get_batches(buckets, model, is_train):
@@ -135,15 +150,14 @@ def create_string_output_from_order(order_file, dev_file, outfile):
 
     open(outfile, 'w').write('\n'.join(outputs))
 
-def eval_trigram(gold_file, out_file):
-    r1 = open(gold_file, 'r')
+def eval_trigram(gold_data, out_file):
     r2 = open(out_file, 'r')
 
     ac_c, all_c = 0.0, 0
-    l1 = r1.readline()
-    while l1:
+
+    for i in range(len(gold_data)):
         l2 = r2.readline()
-        spl1 = ['<s>', '<s>'] + l1.strip().split() + ['</s>', '</s>']
+        spl1 = ['<s>', '<s>'] + [str(gold_data[i][1][j]) for j in range(1, len(gold_data[i][1])-1)] + ['</s>', '</s>']
         spl2 = ['<s>', '<s>'] + l2.strip().split() + ['</s>', '</s>']
         assert len(spl1)==len(spl2)
         gc, oc = set(), set()
@@ -156,5 +170,4 @@ def eval_trigram(gold_file, out_file):
                 ac_c += 1
         all_c += len(gc)
 
-        l1 = r1.readline()
     return round(ac_c * 100.0/all_c, 2)

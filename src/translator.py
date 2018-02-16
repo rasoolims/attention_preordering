@@ -6,8 +6,6 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--train", dest="train_file", metavar="FILE", default=None)
     parser.add_option("--train_t", dest="train_t", metavar="FILE", default=None)
-    parser.add_option("--dev", dest="dev_file", metavar="FILE", default=None)
-    parser.add_option("--dev_t", dest="dev_t", metavar="FILE", default=None)
     parser.add_option("--test", dest="test_file", metavar="FILE", default=None)
     parser.add_option("--output", dest="output_file",  metavar="FILE", default=None)
     parser.add_option("--extrn", dest="external_embedding", help="External embeddings", metavar="FILE")
@@ -42,15 +40,14 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    words, tags, chars = utils.vocab(options.train_file, options.min_freq)
-    train_data = utils.read_data(options.train_file, options.train_t)
+    train_data, dev_data = utils.split_data(options.train_file, options.train_t)
+    words, tags, chars = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
     buckets = [list() for i in range(min_len, max_len)]
     for d in train_data:
         buckets[len(d[1]) - min_len - 1].append(d)
     dev_buckets = [list()]
-    dev_data = utils.read_data(options.dev_file, options.dev_t)
     for d in dev_data:
         dev_buckets[0].append(d)
 
@@ -64,14 +61,12 @@ if options.train_file:
         train_batches = utils.get_batches(buckets, t, True)
         t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
         if (i+1)%1==0:
-            dev_ac = utils.eval_trigram(options.dev_t, options.outdir+'/dev.out'+str(i+1))
+            dev_ac = utils.eval_trigram(dev_data, options.outdir+'/dev.out'+str(i+1))
             print 'dev accuracy', dev_ac
             if dev_ac > best_dev:
                 best_dev = dev_ac
                 print 'saving', best_dev
                 t.save(os.path.join(options.outdir, options.model))
-            utils.create_string_output_from_order(options.outdir+'/dev.out'+str(i+1), options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
-            print 'dev str accuracy', utils.eval_trigram(options.dev_file, options.outdir+'/dev.str.out'+str(i+1))
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
