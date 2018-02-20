@@ -231,6 +231,7 @@ class MT:
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
+            print len(minibatch)
             print minibatch[0]
             print minibatch[1]
             print minibatch[7]
