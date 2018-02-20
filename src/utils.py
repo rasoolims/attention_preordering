@@ -49,8 +49,7 @@ def read_tree_as_data(tree_path):
     for tree in trees:
         words, tags = tree.lemmas, tree.tags
         sen = ' '.join([words[i]+'_'+tags[i] for i in range(len(words))])
-        words, tags = get_words_tags(normalize_sent(sen))
-        data.append(((words, tags), [0] + [int(l) for l in range(len(words))] + [len(words) + 1]))
+        data.append((get_words_tags(normalize_sent(sen)), [0] + [int(l) for l in range(len(words))] + [len(words) + 1]))
     assert len(data) == len(trees)
     return trees, data
 
