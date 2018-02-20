@@ -96,8 +96,15 @@ class DepTree:
             rev_order[o] = i + 1
 
         for o in new_order:
-            new_head = rev_order[self.heads[o-1]]
-            new_heads.append(new_head)
+            try:
+                new_head = rev_order[self.heads[o-1]]
+                new_heads.append(new_head)
+            except:
+                print o-1
+                print self.heads[o-1]
+                print rev_order[self.heads[o-1]]
+                new_head = rev_order[self.heads[o - 1]]
+                new_heads.append(new_head)
 
         tree = DepTree(new_words, new_lemmas, new_tags, new_heads, new_labels)
         tree.lang_id = self.lang_id
