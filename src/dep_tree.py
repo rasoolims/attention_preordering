@@ -100,6 +100,7 @@ class DepTree:
                 new_head = rev_order[self.heads[o-1]]
                 new_heads.append(new_head)
             except:
+                print new_order
                 print o-1
                 print self.heads[o-1]
                 print self.heads
