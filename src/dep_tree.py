@@ -4,8 +4,8 @@ from collections import defaultdict
 
 class DepTree:
     def __init__(self, words, lemmas, tags, heads, labels):
-        self.words = words
-        self.lemmas = lemmas
+        self.words = [w.replace(' ', '') for w in words]
+        self.lemmas = [w.replace(' ', '') for w in lemmas]
         self.tags = tags
         self.ftags = tags
         self.heads = heads
