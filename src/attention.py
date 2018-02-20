@@ -231,8 +231,8 @@ class MT:
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
-            print minibatch[0][0]
-            print minibatch[0][1]
+            print minibatch[0]
+            print minibatch[1]
             for order in self.get_output_int(minibatch):
                 print trees[t_num].lemmas
                 new_trees.append(trees[t_num].reorder(order))
