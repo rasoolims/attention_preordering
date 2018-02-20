@@ -47,7 +47,7 @@ def read_tree_as_data(tree_path):
     trees = DepTree.load_trees_from_conll_file(tree_path)
     data = []
     for tree in trees:
-        words, tags = [l.replace(' ', '') for l in tree.lemmas], tree.tags
+        words, tags = tree.lemmas, tree.tags
         sen = ' '.join([words[i]+'_'+tags[i] for i in range(len(words))])
         words2, tags2 = get_words_tags(normalize_sent(sen))
         if len(words2) == len(words):
