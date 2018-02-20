@@ -232,7 +232,7 @@ class MT:
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
             for order in self.get_output_int(minibatch):
-                print trees[t_num].words
+                print trees[t_num].lemmas
                 new_trees.append(trees[t_num].reorder(order))
                 t_num += 1
             if (d + 1) % 100 == 0:
