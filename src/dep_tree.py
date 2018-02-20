@@ -102,6 +102,8 @@ class DepTree:
             except:
                 print o-1
                 print self.heads[o-1]
+                print self.heads
+                print rev_order
                 print rev_order[self.heads[o-1]]
                 new_head = rev_order[self.heads[o - 1]]
                 new_heads.append(new_head)
