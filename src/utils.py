@@ -108,7 +108,8 @@ def get_batches(buckets, model, is_train):
     return mini_batches
 
 
-def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model): #todo fixed embeddings when added.
+def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model):
+    print len(batch), cur_len, cur_c_len
     words = np.array([np.array(
         [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
