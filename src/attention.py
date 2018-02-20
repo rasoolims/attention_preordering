@@ -231,12 +231,7 @@ class MT:
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
-            print len(minibatch)
-            print minibatch[0]
-            print minibatch[1]
-            print minibatch[6]
             for order in self.get_output_int(minibatch):
-                print trees[t_num].lemmas
                 new_trees.append(trees[t_num].reorder(order))
                 t_num += 1
             if (d + 1) % 100 == 0:
