@@ -6,6 +6,7 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--train", dest="train_file", metavar="FILE", default=None)
     parser.add_option("--train_t", dest="train_t", metavar="FILE", default=None)
+    parser.add_option("--train_o", dest="train_o", metavar="FILE", default=None)
     parser.add_option("--test", dest="test_file", metavar="FILE", default=None)
     parser.add_option("--output", dest="output_file",  metavar="FILE", default=None)
     parser.add_option("--extrn", dest="external_embedding", help="External embeddings", metavar="FILE")
@@ -40,8 +41,8 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    train_data, dev_data = utils.split_data(options.train_file, options.train_t)
-    words, tags, chars = utils.vocab(train_data, options.min_freq)
+    train_data, dev_data = utils.split_data(options.train_file, options.train_t, options.train_o)
+    words, tags, chars, output_words = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
     buckets = [list() for i in range(min_len, max_len)]
@@ -52,8 +53,8 @@ if options.train_file:
         dev_buckets[0].append(d)
 
     with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
-        pickle.dump((words, tags, chars, options), paramsfp)
-    t = MT(options, words, tags, chars)
+        pickle.dump((words, tags, chars, output_words, options), paramsfp)
+    t = MT(options, words, tags, chars, output_words)
 
     dev_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
@@ -68,11 +69,14 @@ if options.train_file:
                 print 'saving', best_dev
                 t.save(os.path.join(options.outdir, options.model))
 
+            dev_ac = utils.eval_trigram(dev_data, options.outdir + '/dev.out' + str(i + 1) + '.w', True)
+            print 'dev str accuracy', dev_ac
+
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
-        words, tags, chars, stored_options = pickle.load(paramsfp)
+        words, tags, chars, output_words, stored_options = pickle.load(paramsfp)
     stored_options.external_embedding = options.external_embedding
-    t = MT(stored_options, words, tags, chars)
+    t = MT(stored_options, words, tags, chars, output_words)
     t.load(os.path.join(options.outdir, options.model))
     test_buckets = [list()]
     trees, test_data = utils.read_tree_as_data(options.test_file)

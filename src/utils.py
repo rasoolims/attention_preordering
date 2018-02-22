@@ -31,7 +31,8 @@ def get_words_tags(sent, add_eos=True):
 
 def vocab(train_data, min_count=2):
     word_counts = defaultdict(int)
-    tags,chars = set(), set()
+    tags, chars = set(), set()
+    output_words = set(['<EOS>'])
     for data in train_data:
         ws, ts = data[0]
         for w in ws:
@@ -40,7 +41,9 @@ def vocab(train_data, min_count=2):
                 chars.add(c)
         for t in ts:
             tags.add(t)
-    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags), list(chars)
+        for w in data[2]:
+            output_words.add(w)
+    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags), list(chars), list(output_words)
 
 
 def read_tree_as_data(tree_path):
@@ -49,35 +52,41 @@ def read_tree_as_data(tree_path):
     for tree in trees:
         words, tags = tree.lemmas, tree.tags
         sen = ' '.join([words[i]+'_'+tags[i] for i in range(len(words))])
-        data.append((get_words_tags(normalize_sent(sen)), [0] + [int(l) for l in range(len(words))] + [len(words) + 1]))
+        data.append((get_words_tags(normalize_sent(sen)), [0] + [int(l) for l in range(len(words))] + [len(words) + 1], ['<EOS>'] + words + ['<EOS>']))
     assert len(data) == len(trees)
     return trees, data
 
 
-def read_data(train_path, output_path):
+def read_data(train_path, output_path, word_output_path):
     t1 = codecs.open(train_path, 'r')
     t2 = codecs.open(output_path, 'r')
+    t3 = codecs.open(word_output_path, 'r')
     data = []
     l1 = t1.readline()
     while l1:
         l2 = t2.readline()
+        l3 = t3.readline()
         words, tags = get_words_tags(normalize_sent(l1.strip()))
-        data.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
+        data.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1], ['<EOS>'] + l3.strip().split() + ['<EOS>']))
         l1 = t1.readline()
     return data
 
-def split_data(train_path, output_path):
+
+def split_data(train_path, output_path, word_output_path):
     t1 = codecs.open(train_path, 'r')
     t2 = codecs.open(output_path, 'r')
+    t3 = codecs.open(word_output_path, 'r')
     tdata, ddata = [], []
     l1 = t1.readline()
     while l1:
         l2 = t2.readline()
+        l3 = t3.readline().lower()
         words, tags = get_words_tags(normalize_sent(l1.strip()))
+        w_output = ['<EOS>'] + l3.strip().split() + ['<EOS>']
         if random.randint(0, 9)==9:
-            ddata.append(((words, tags), [0] + [int(l) for l in l2.split()] + [len(l2.split()) + 1]))
+            ddata.append(((words, tags), [0] + [int(l) for l in l2.split()] + [len(l2.split()) + 1], w_output))
         else:
-            tdata.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
+            tdata.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1], w_output))
         l1 = t1.readline()
     return tdata, ddata
 
@@ -122,6 +131,9 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model):
     output_words = np.array([np.array(
         [model.w2int.get(batch[i][0][0][batch[i][1][j]], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
+    foreign_words = np.array([np.array(
+        [model.o2int.get(batch[i][2][j], 0) if j < len(batch[i][2]) else model.o2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
 
     chars = [list() for _ in range(cur_c_len)]
     for c_pos in range(cur_c_len):
@@ -136,7 +148,7 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model):
     chars = np.array(chars)
     sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pwords, pos, output_words, positions, chars, sen_lens, masks))
+    mini_batches.append((words, pwords, pos, output_words, positions, chars, sen_lens, foreign_words, masks))
 
 def create_string_output_from_order(order_file, dev_file, outfile):
     lines = codecs.open(order_file, 'r').read().strip().split('\n')
@@ -150,16 +162,16 @@ def create_string_output_from_order(order_file, dev_file, outfile):
 
     open(outfile, 'w').write('\n'.join(outputs))
 
-def eval_trigram(gold_data, out_file):
+def eval_trigram(gold_data, out_file, is_str = False):
     r2 = open(out_file, 'r')
 
     ac_c, all_c = 0.0, 0
-
+    index = 2 if is_str else 1
     for i in range(len(gold_data)):
         l2 = r2.readline()
-        spl1 = ['<s>', '<s>'] + [str(gold_data[i][1][j]) for j in range(1, len(gold_data[i][1])-1)] + ['</s>', '</s>']
+        spl1 = ['<s>', '<s>'] + [str(gold_data[i][index][j]) for j in range(1, len(gold_data[i][index])-1)] + ['</s>', '</s>']
         spl2 = ['<s>', '<s>'] + l2.strip().split() + ['</s>', '</s>']
-        assert len(spl1)==len(spl2)
+        assert len(spl1) == len(spl2)
         gc, oc = set(), set()
         for i in range(2, len(spl1)-2):
             s1, s2 = ' '.join(spl1[i:i+3]), ' '.join(spl2[i:i+3])
@@ -171,3 +183,4 @@ def eval_trigram(gold_data, out_file):
         all_c += len(gc)
 
     return round(ac_c * 100.0/all_c, 2)
+

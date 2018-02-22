@@ -4,7 +4,7 @@ import numpy as np
 
 
 class MT:
-    def __init__(self, options, words, tags, chars):
+    def __init__(self, options, words, tags, chars, output_words):
         self.EOS = "<EOS>"
         self.PAD = 1
         self.options = options
@@ -12,9 +12,12 @@ class MT:
         tags.append(self.EOS)
         self.int2w = ['<unk>', '<pad>'] + words
         self.int2t = ['<unk>', '<pad>'] + tags
+        self.int2o = output_words
+        self.o2int = {w: i for i, w in enumerate(output_words)}
         self.w2int = {w: i + 2 for i, w in enumerate(words)}
         self.t2int = {t: i + 2 for i, t in enumerate(tags)}
         self.c2int = {c: i + 2 for i, c in enumerate(chars)}
+        self.OVOCAB_SIZE = len(self.int2o)
         self.WVOCAB_SIZE = len(self.int2w)
         self.TVOCAB_SIZE = len(self.int2t)
 
@@ -48,14 +51,17 @@ class MT:
         self.clookup = self.model.add_lookup_parameters((len(chars) + 2, options.ce))
         self.char_lstm = dy.BiRNNBuilder(1, options.ce, options.we, self.model, dy.VanillaLSTMBuilder)
 
-        self.dec_lstm = dy.LSTMBuilder(self.LSTM_NUM_OF_LAYERS, options.hdim * 2 + options.we, options.hdim, self.model)
+        self.dec_lstm = dy.LSTMBuilder(self.LSTM_NUM_OF_LAYERS, options.hdim * 2 + 2 * options.we, options.hdim, self.model)
 
         self.wlookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
         self.tlookup = self.model.add_lookup_parameters((self.TVOCAB_SIZE, options.pe))
         self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * 2))
         self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
-        self.output_lookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
+        self.decoder_w = self.model.add_parameters((self.OVOCAB_SIZE , options.hdim))
+        self.decoder_b = self.model.add_parameters((self.OVOCAB_SIZE))
+        self.o_output_lookup = self.model.add_lookup_parameters((self.OVOCAB_SIZE, options.we))
+        self.in_output_lookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
         def _emb_mask_generator(seq_len, batch_size):
@@ -118,41 +124,49 @@ class MT:
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
         return att_weights
 
-    def decode(self, encoded, output_words, output_index, masks):
+    def decode(self, encoded, output_words, foreign_words, output_index, masks):
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
-        last_output_embeddings = dy.lookup_batch(self.output_lookup, output_words[0])
+        last_output_embeddings = dy.lookup_batch(self.in_output_lookup, output_words[0])
+        last_foreign_output_embeddings = dy.lookup_batch(self.o_output_lookup, foreign_words[0])
         empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(output_words[0])), dtype=float)),
                                   (self.hdim * 2,), len(output_words[0]))
-        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings]))
+        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_foreign_output_embeddings]))
         loss = []
         for p, word in enumerate(output_words):
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, True)
-            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_foreign_output_embeddings])
             vector = dy.dropout(vector, self.options.dropout)
+            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
+            loss_t = dy.cmult(dy.pickneglogsoftmax_batch(out_vector, foreign_words[p]), mask_tensor)
+            loss.append(dy.sum_batches(loss_t) / loss_t.dim()[1])
+
             s = s.add_input(vector)
-            last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
+            last_output_embeddings = dy.lookup_batch(self.in_output_lookup, word)
+            last_foreign_output_embeddings = dy.lookup_batch(self.o_output_lookup, foreign_words[p])
             loss_p = dy.cmult(dy.pick_batch(-dy.log(att_weights), output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
         return loss
 
     def generate(self, minibatch):
-        words, pwords, tags, _, _, chars, sen_lens, masks = minibatch
+        words, pwords, tags, _, _, chars, sen_lens, foreign_words, masks = minibatch
         embedded = self.embed_sentence(words, pwords, tags, chars, False)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
-        last_output_embeddings = dy.lookup_batch(self.output_lookup, words[0])
+        last_output_embeddings = dy.lookup_batch(self.in_output_lookup, words[0])
+        last_foreign_output_embeddings = dy.lookup_batch(self.o_output_lookup, foreign_words[0])
         empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(words[0])), dtype=float)),
                                   (self.hdim * 2,), len(words[0]))
-        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings]))
+        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_foreign_output_embeddings]))
 
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
+        out_words = [[0]*words.shape[0] for _ in range(words.shape[1])]
         first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
         mask = np.zeros((words.shape[0], words.shape[1]), dtype=float)
         first_mask[0] = np.array([0] * words.shape[1])
@@ -168,10 +182,13 @@ class MT:
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, False)
-            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_foreign_output_embeddings])
+            out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
+            next_words = np.argmax(out_vector.npvalue(), axis=0)
+
             s = s.add_input(vector)
 
-            scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            scores = att_weights.npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([scores, cur_mask], axis=0)
             next_positions = np.argmax(scores, axis=0)
@@ -179,27 +196,36 @@ class MT:
             for i, position in enumerate(next_positions):
                 mask[position][i] = -float('inf')
                 out[i][p] = position
-            last_output_embeddings = dy.lookup_batch(self.output_lookup, next_words)
+                out_words[i][p] = self.int2o[next_words[i]]
+                if out_words[i][p] == '<unk>':
+                   out_words[i][p] = self.int2w[words[position][i]]
+
+            last_output_embeddings = dy.lookup_batch(self.in_output_lookup, next_words)
         dy.renew_cg()
-        return out
+        return out, out_words
 
     def get_loss(self, minibatch):
-        words, pwords, tags, output_words, positions, chars, _, masks = minibatch
+        words, pwords, tags, output_words, positions, chars, _, foreign_words, masks = minibatch
         embedded = self.embed_sentence(words, pwords, tags, chars, True)
         encoded = self.encode_sentence(embedded,  words.shape[1],  self.options.dropout,  self.options.dropout)
-        return self.decode(encoded, output_words, positions, masks)
+        return self.decode(encoded, output_words, foreign_words, positions, masks)
 
     def get_output_int(self, minibatch):
-        gen_out, masks = self.generate(minibatch), minibatch[-1]
+        (gen_out, gen_words_out), masks = self.generate(minibatch), minibatch[-1]
         out = [[gen_out[i][j] for j in range(1, len(gen_out[i])) if masks[j][i] == 1] for i in range(len(gen_out))]
         out = [o[:-1] for o in out]
-        return out
+        words_out = [[gen_words_out[i][j] for j in range(1, len(gen_words_out[i])) if masks[j][i] == 1] for i in range(len(gen_words_out))]
+        words_out = [' '.join(o[:-1]) for o in words_out]
+        return out, words_out
 
     def get_output(self, minibatch):
-        gen_out, masks = self.generate(minibatch), minibatch[-1]
+        (gen_out, gen_words_out), masks = self.generate(minibatch), minibatch[-1]
         out = [[str(gen_out[i][j]) for j in range(1, len(gen_out[i])) if masks[j][i] == 1] for i in range(len(gen_out))]
         out = [' '.join(o[:-1]) for o in out]
-        return out
+
+        words_out = [[gen_words_out[i][j] for j in range(1, len(gen_words_out[i])) if masks[j][i] == 1] for i in range(len(gen_words_out))]
+        words_out = [' '.join(o[:-1]) for o in words_out]
+        return out, words_out
 
     def train(self, train_batches, dev_batches, dev_out, batch_size=1):
         start = time.time()
@@ -208,7 +234,7 @@ class MT:
             loss = self.get_loss(minibatch)
             loss_sum += self.backpropagate(loss)
             b += 1
-            dy.renew_cg()
+            dy.renew_cg(immediate_compute=True, check_validity=True)
             loss = []
             if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
@@ -219,19 +245,24 @@ class MT:
 
     def reorder(self, batches, out_file):
         writer = codecs.open(out_file, 'w')
+        writer2 = codecs.open(out_file+'.w', 'w')
+        d = 0
         for d, minibatch in enumerate(batches):
-            writer.write('\n'.join(self.get_output(minibatch)) + '\n')
+            out, wout = self.get_output(minibatch)
+            writer.write('\n'.join(out) + '\n')
+            writer2.write('\n'.join(wout) + '\n')
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
         writer.close()
+        writer2.close()
 
     def reorder_tree(self, batches, trees, out_file):
         writer = codecs.open(out_file, 'w')
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
-            for order in self.get_output_int(minibatch):
+            for (order, out_words) in self.get_output_int(minibatch):
                 new_trees.append(trees[t_num].reorder(order))
                 t_num += 1
             if (d + 1) % 100 == 0:
