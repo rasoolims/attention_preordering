@@ -153,3 +153,9 @@ def eval_trigram(gold_data, out_file):
 
     return round(ac_c * 100.0/all_c, 2)
 
+
+def write_data(data, path):
+    writer = codecs.open(path, 'w')
+    for d in data:
+        writer.write(' '.join(d[0][0][1:-1])+'\n')
+    writer.close()

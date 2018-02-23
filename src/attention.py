@@ -280,7 +280,7 @@ class MT:
             writer.write('\n'.join(wout) + '\n')
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
-        #sys.stdout.write(str(d) + '\n')
+        if d>1: sys.stdout.write(str(d) + '\n')
         writer.close()
 
     def reorder_tree(self, batches, trees, out_file):

@@ -42,6 +42,7 @@ if __name__ == '__main__':
 if options.train_file:
     train_data, dev_data = utils.split_data(options.train_file, options.train_t)
     print len(train_data), len(dev_data)
+    utils.write_data(dev_data, options.outdir+'/dev.gold')
     words, tags, chars, output_words = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
@@ -61,13 +62,12 @@ if options.train_file:
     for i in range(options.epoch):
         train_batches = utils.get_batches(buckets, t, True)
         t.train(train_batches, dev_batches, options.outdir+'/dev.out', options.batch)
-        if (i+1)%100==0:
-            dev_ac = utils.eval_trigram(dev_data, options.outdir + '/dev.out')
-            print 'dev accuracy', dev_ac
-            if dev_ac > best_dev:
-                best_dev = dev_ac
-                print 'saving', best_dev
-                t.save(os.path.join(options.outdir, options.model))
+        dev_ac = utils.eval_trigram(dev_data, options.outdir + '/dev.out')
+        print 'dev accuracy', dev_ac
+        if dev_ac > best_dev:
+            best_dev = dev_ac
+            print 'saving', best_dev
+            t.save(os.path.join(options.outdir, options.model))
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
