@@ -68,11 +68,11 @@ def split_data(train_path, output_path):
     while l1:
         l2 = t2.readline()
         words, tags = get_words_tags(normalize_sent(l1.strip()))
-        target_words = ['<EOS>'] + normalize_sent(l2.strip()).split() + ['<EOS>']
+        target_words = ['<EOS>'] + [normalize(w) for w in l2.strip().split()] + ['<EOS>']
         if random.randint(0, 9)==9: #todo
-            tdata.append(((words, tags), target_words))
-        else:
             ddata.append(((words, tags), target_words))
+        else:
+            tdata.append(((words, tags), target_words))
         l1 = t1.readline()
     return tdata, ddata
 

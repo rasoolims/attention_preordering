@@ -160,7 +160,7 @@ class MT:
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, output_embeddings]))
 
         out_words = [list() for _ in range(words.shape[1])]
-
+        stops = [0 for _ in range(words.shape[1])]
         for p in range(2 * len(words)):
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
@@ -168,17 +168,17 @@ class MT:
             vector = dy.concatenate([input_mat * att_weights, output_embeddings])
             out_vector = self.decoder_w.expr() * s.output() + self.decoder_b.expr()
             next_words_indices = np.argmax(out_vector.npvalue(), axis=0)
+            if words.shape[1] == 1:
+                next_words_indices = [next_words_indices]
 
             s = s.add_input(vector)
 
             for i, position in enumerate(next_words_indices):
-                try:
-                    w = self.int2o[next_words_indices[i]]
-                    if w != '<EOS>':
-                        out_words[i].append(w)
-                except:
-                    print 'what?'
-
+                w = self.int2o[next_words_indices[i]]
+                if w != '<EOS>' and stops[i] < 2:
+                    out_words[i].append(w)
+                else:
+                    stops[i] = stops[i] + 1
             output_embeddings = dy.lookup_batch(self.output_lookup, next_words_indices)
         dy.renew_cg()
         return out_words
@@ -280,7 +280,7 @@ class MT:
             writer.write('\n'.join(wout) + '\n')
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
-        sys.stdout.write(str(d) + '\n')
+        #sys.stdout.write(str(d) + '\n')
         writer.close()
 
     def reorder_tree(self, batches, trees, out_file):

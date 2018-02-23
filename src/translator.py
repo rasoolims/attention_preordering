@@ -41,12 +41,13 @@ if __name__ == '__main__':
 (options, args) = parser.parse_args()
 if options.train_file:
     train_data, dev_data = utils.split_data(options.train_file, options.train_t)
+    print len(train_data), len(dev_data)
     words, tags, chars, output_words = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
-    buckets = [list() for i in range(min_len, max_len)]
+    buckets = [list() for i in range(min_len, max(max_len, min_len+1))]
     for d in train_data:
-        buckets[len(d[1]) - min_len - 1].append(d)
+        buckets[max(0, len(d[1]) - min_len - 1)].append(d)
     dev_buckets = [list()]
     for d in dev_data:
         dev_buckets[0].append(d)
@@ -59,9 +60,9 @@ if options.train_file:
     best_dev = 0
     for i in range(options.epoch):
         train_batches = utils.get_batches(buckets, t, True)
-        t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
-        if (i+1)%1==0:
-            dev_ac = utils.eval_trigram(dev_data, options.outdir + '/dev.out' + str(i + 1))
+        t.train(train_batches, dev_batches, options.outdir+'/dev.out', options.batch)
+        if (i+1)%100==0:
+            dev_ac = utils.eval_trigram(dev_data, options.outdir + '/dev.out')
             print 'dev accuracy', dev_ac
             if dev_ac > best_dev:
                 best_dev = dev_ac
