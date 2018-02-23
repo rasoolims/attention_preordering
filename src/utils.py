@@ -156,6 +156,9 @@ def eval_trigram(gold_data, out_file):
 
 def write_data(data, path):
     writer = codecs.open(path, 'w')
+    writer2 = codecs.open(path+'.trans', 'w')
     for d in data:
         writer.write(' '.join(d[0][0][1:-1])+'\n')
+        writer2.write(' '.join(d[1][1:-1]) + '\n')
     writer.close()
+    writer2.close()
