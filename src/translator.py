@@ -22,6 +22,7 @@ if __name__ == '__main__':
     parser.add_option("--beta1", type="float", dest="beta1", default=0.9)
     parser.add_option("--beta2", type="float", dest="beta2", default=0.9)
     parser.add_option("--dropout", type="float", dest="dropout", default=0.33)
+    parser.add_option("--dev_percent", type="int", dest="dev_percent", default=10)
     parser.add_option("--outdir", type="string", dest="outdir", default="results")
     parser.add_option("--layer", type="int", dest="layer", default=3)
     parser.add_option("--hdim", type="int", dest="hdim", default=200)
@@ -40,7 +41,7 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    train_data, dev_data = utils.split_data(options.train_file, options.train_t)
+    train_data, dev_data = utils.split_data(options.train_file, options.train_t, options.dev_percent)
     words, tags, chars = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])

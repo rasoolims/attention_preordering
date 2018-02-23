@@ -66,7 +66,7 @@ def read_data(train_path, output_path):
         l1 = t1.readline()
     return data
 
-def split_data(train_path, output_path):
+def split_data(train_path, output_path, dev_percent):
     t1 = codecs.open(train_path, 'r')
     t2 = codecs.open(output_path, 'r')
     tdata, ddata = [], []
@@ -74,7 +74,7 @@ def split_data(train_path, output_path):
     while l1:
         l2 = t2.readline()
         words, tags = get_words_tags(normalize_sent(l1.strip()))
-        if random.randint(0, 9)==9:
+        if random.randint(0, 100) == dev_percent:
             ddata.append(((words, tags), [0] + [int(l) for l in l2.split()] + [len(l2.split()) + 1]))
         else:
             tdata.append(((words, tags), [0]+[int(l) for l in l2.split()]+[len(l2.split())+1]))
