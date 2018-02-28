@@ -55,7 +55,6 @@ class MT:
         self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * 2))
         self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
-        self.output_lookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
         def _emb_mask_generator(seq_len, batch_size):
@@ -118,39 +117,42 @@ class MT:
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
         return att_weights
 
-    def decode(self, encoded, output_words, output_index, masks):
+    def decode(self, encoded, output_words, output_tags, output_index, masks):
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
-        last_output_embeddings = dy.lookup_batch(self.output_lookup, output_words[0])
+        last_output_embeddings = dy.lookup_batch(self.wlookup, output_words[0])
+        last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[0])
         empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(output_words[0])), dtype=float)),
                                   (self.hdim * 2,), len(output_words[0]))
-        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings]))
+        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings]))
         loss = []
         for p, word in enumerate(output_words):
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, True)
-            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             vector = dy.dropout(vector, self.options.dropout)
             s = s.add_input(vector)
-            last_output_embeddings = dy.lookup_batch(self.output_lookup, word)
+            last_output_embeddings = dy.lookup_batch(self.wlookup, word)
+            last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[p])
             loss_p = dy.cmult(dy.pick_batch(-dy.log(att_weights), output_index[p]), mask_tensor)
             loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
         return loss
 
     def generate(self, minibatch):
-        words, pwords, tags, _, _, chars, sen_lens, masks = minibatch
+        words, pwords, tags, _, _, _, chars, sen_lens, masks = minibatch
         embedded = self.embed_sentence(words, pwords, tags, chars, False)
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
-        last_output_embeddings = dy.lookup_batch(self.output_lookup, words[0])
+        last_output_embeddings = dy.lookup_batch(self.wlookup, words[0])
+        last_tag_embeddings = dy.lookup_batch(self.tlookup, tags[0])
         empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(words[0])), dtype=float)),
                                   (self.hdim * 2,), len(words[0]))
-        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings]))
+        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings]))
 
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
         first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
@@ -168,7 +170,7 @@ class MT:
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, False)
-            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings])
+            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             s = s.add_input(vector)
 
             scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
@@ -176,18 +178,20 @@ class MT:
             scores = np.sum([scores, cur_mask], axis=0)
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
+            next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
             for i, position in enumerate(next_positions):
                 mask[position][i] = -float('inf')
                 out[i][p] = position
-            last_output_embeddings = dy.lookup_batch(self.output_lookup, next_words)
+            last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
+            last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
         dy.renew_cg()
         return out
 
     def get_loss(self, minibatch):
-        words, pwords, tags, output_words, positions, chars, _, masks = minibatch
+        words, pwords, tags, output_words, output_tags, positions, chars, _, masks = minibatch
         embedded = self.embed_sentence(words, pwords, tags, chars, True)
         encoded = self.encode_sentence(embedded,  words.shape[1],  self.options.dropout,  self.options.dropout)
-        return self.decode(encoded, output_words, positions, masks)
+        return self.decode(encoded, output_words, output_tags, positions, masks)
 
     def get_output_int(self, minibatch):
         gen_out, masks = self.generate(minibatch), minibatch[-1]
