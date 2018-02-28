@@ -123,7 +123,8 @@ def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model):
         [model.w2int.get(batch[i][0][0][batch[i][1][j]], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
     output_tags = np.array([np.array(
-        [model.t2int.get(batch[i][0][0][batch[i][0][j]], 0) if j < len(batch[i][0][0]) else model.t2int[model.EOS] for i in range(len(batch))]) for j in range(cur_len)])
+        [model.t2int.get(batch[i][0][1][batch[i][1][j]], 0) if j < len(batch[i][0][1]) else model.t2int[model.EOS] for i
+         in range(len(batch))]) for j in range(cur_len)])
 
     chars = [list() for _ in range(cur_c_len)]
     for c_pos in range(cur_c_len):
