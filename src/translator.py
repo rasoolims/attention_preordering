@@ -58,9 +58,10 @@ if options.train_file:
 
     dev_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
+    iter = 0
     for i in range(options.epoch):
         train_batches = utils.get_batches(buckets, t, True)
-        t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), options.batch)
+        iter = t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), iter, options.batch)
         if (i+1)%1==0:
             dev_ac = utils.eval_trigram(dev_data, options.outdir+'/dev.out'+str(i+1))
             print 'dev accuracy', dev_ac
