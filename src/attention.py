@@ -218,10 +218,10 @@ class MT:
                 print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
                 start = time.time()
                 loss_sum, b = 0, 0
-
-            decay_steps = min(1.0, float(t) / 50000)
-            lr = self.options.lr * 0.75 ** decay_steps
-            self.trainer.learning_rate = lr
+            if self.options.anneal:
+                decay_steps = min(1.0, float(t) / 50000)
+                lr = self.options.lr * 0.75 ** decay_steps
+                self.trainer.learning_rate = lr
             t += 1
         self.reorder(dev_batches, dev_out)
         return t
