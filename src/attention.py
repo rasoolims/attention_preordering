@@ -20,7 +20,6 @@ class MT:
 
         self.LSTM_NUM_OF_LAYERS = options.layer
         self.ATTENTION_SIZE = options.attention
-        self.hdim = options.hdim
         self.model = dy.Model()
 
         external_embedding_fp = gzip.open(options.external_embedding, 'r')
@@ -52,8 +51,8 @@ class MT:
 
         self.wlookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
         self.tlookup = self.model.add_lookup_parameters((self.TVOCAB_SIZE, options.pe))
-        self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, self.hdim * 2))
-        self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, self.phdim * self.LSTM_NUM_OF_LAYERS * 2))
+        self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, options.hdim * 2))
+        self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, options.phdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
@@ -123,8 +122,8 @@ class MT:
 
         last_output_embeddings = dy.lookup_batch(self.wlookup, output_words[0])
         last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[0])
-        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(output_words[0])), dtype=float)),
-                                  (self.hdim * 2,), len(output_words[0]))
+        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 2, len(output_words[0])), dtype=float)),
+                                  (self.options.hdim * 2,), len(output_words[0]))
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings]))
         loss = []
         for p, word in enumerate(output_words):
@@ -150,8 +149,8 @@ class MT:
 
         last_output_embeddings = dy.lookup_batch(self.wlookup, words[0])
         last_tag_embeddings = dy.lookup_batch(self.tlookup, tags[0])
-        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.hdim * 2, len(words[0])), dtype=float)),
-                                  (self.hdim * 2,), len(words[0]))
+        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 2, len(words[0])), dtype=float)),
+                                  (self.options.hdim * 2,), len(words[0]))
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings]))
 
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
