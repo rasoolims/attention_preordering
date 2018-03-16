@@ -34,14 +34,14 @@ def read_tree_as_data(tree_path):
     trees = DepTree.load_trees_from_conll_file(tree_path)
     data = []
     for tree in trees:
-        words, tags,rels, heads = tree.lemmas, tree.tags, tree.labels, tree.heads
+        words, tags, rels, heads = tree.lemmas, tree.tags, tree.labels, tree.heads
         ws = ['<EOS>'] + [normalize(words[i]) for i in range(len(words))] + ['<EOS>']
         tags = ['<EOS>'] + tags + ['<EOS>']
         relations = ['<EOS>'] + [rels[i]+ ('-left' if heads[i] >=i else '-right') for i in range(len(words))]+ ['<EOS>']
         heads = [0] + [heads[i] for i in range(len(words))] + [0]
         deps = ['<EOS>'] + [relations[i] for i in range(len(words))] + ['<EOS>']
-        data = (ws, tags, relations, ws, tags, relations, tree.lang_id)
-        data.append((data, [int(l) for l in range(len(ws))], heads, deps))
+        d = (ws, tags, relations, ws, tags, relations, tree.lang_id)
+        data.append((d, [int(l) for l in range(len(ws))], heads, deps))
     assert len(data) == len(trees)
     return trees, data
 
