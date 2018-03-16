@@ -95,23 +95,24 @@ class MT:
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
         relembed = [dy.lookup_batch(self.rlookup, rels[i]) for i in range(len(rels))]
         langembed = [dy.lookup_batch(self.llookup, langs[i]) for i in range(len(langs))]
-        if not is_train:
-            return [dy.concatenate([wembed[i], posembed[i], relembed[i], langembed[i]]) for i in range(len(ts))]
-        else:
-            emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
-            return [dy.concatenate([dy.cmult(w, wm), dy.cmult(pos, posm), dy.cmult(rem,relm), dy.cmult(lem,langm)]) for w, pos,rem,lem, (wm, posm,relm, langm) in
-                      zip(wembed, posembed, relembed, langembed, emb_masks)]
+        return [dy.concatenate([wembed[i], posembed[i], relembed[i], langembed[i]]) for i in range(len(ts))]
+        # if not is_train:
+        #     return [dy.concatenate([wembed[i], posembed[i], relembed[i], langembed[i]]) for i in range(len(ts))]
+        # else:
+        #     emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
+        #     return [dy.concatenate([dy.cmult(w, wm), dy.cmult(pos, posm), dy.cmult(rem,relm), dy.cmult(lem,langm)]) for w, pos,rem,lem, (wm, posm,relm, langm) in
+        #               zip(wembed, posembed, relembed, langembed, emb_masks)]
 
 
 
     def encode_sentence(self, input_embeds, batch_size=None, dropout_x=0., dropout_h=0.):
         for fb, bb in self.encoder_bilstm.builder_layers:
             f, b = fb.initial_state(), bb.initial_state()
-            fb.set_dropouts(dropout_x, dropout_h)
-            bb.set_dropouts(dropout_x, dropout_h)
-            if batch_size is not None:
-                fb.set_dropout_masks(batch_size)
-                bb.set_dropout_masks(batch_size)
+            # fb.set_dropouts(dropout_x, dropout_h)
+            # bb.set_dropouts(dropout_x, dropout_h)
+            # if batch_size is not None:
+            #     fb.set_dropout_masks(batch_size)
+            #     bb.set_dropout_masks(batch_size)
             fs, bs = f.transduce(input_embeds), b.transduce(reversed(input_embeds))
             input_embeds = [dy.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
         return input_embeds
@@ -121,8 +122,8 @@ class MT:
         # w1dt: (attdim x seqlen)
         # w2dt: (attdim x attdim)
         w2dt = self.attention_w2.expr() * dy.concatenate(list(state.s()))
-        if is_train:
-            w2dt = dy.dropout(w2dt, self.options.dropout)
+        # if is_train:
+        #     w2dt = dy.dropout(w2dt, self.options.dropout)
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
@@ -145,7 +146,7 @@ class MT:
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, True)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings, last_rel_embeddings])
-            vector = dy.dropout(vector, self.options.dropout)
+            # vector = dy.dropout(vector, self.options.dropout)
             s = s.add_input(vector)
             last_output_embeddings = dy.lookup_batch(self.wlookup, word)
             last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[p])
