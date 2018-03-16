@@ -39,7 +39,7 @@ def read_tree_as_data(tree_path):
         tags = ['<EOS>'] + tags + ['<EOS>']
         relations = ['<EOS>'] + [rels[i]+ ('-left' if heads[i] >=i else '-right') for i in range(len(words))]+ ['<EOS>']
         heads = [0] + [heads[i] for i in range(len(words))] + [0]
-        deps = ['<EOS>'] + [relations[i] for i in range(len(words))] + ['<EOS>']
+        deps = ['<EOS>'] + [rels[i] for i in range(len(words))] + ['<EOS>']
         d = (ws, tags, relations, ws, tags, relations, tree.lang_id)
         data.append((d, [int(l) for l in range(len(ws))], heads, deps))
     assert len(data) == len(trees)
