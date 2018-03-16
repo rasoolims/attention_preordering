@@ -199,7 +199,7 @@ class MT:
                 if dep != '<EOS>':
                     direction = '-left' if mask[heads[position][i]][i] == 0 else '-right'
                     dep = dep + direction
-                next_out_rels.append(self.rel2int[dep])
+                next_out_rels.append(self.rel2int.get(dep, 0))
 
             for i, position in enumerate(next_positions):
                 mask[position][i] = -float('inf')
