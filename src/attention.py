@@ -176,9 +176,10 @@ class MT:
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([scores, cur_mask], axis=0)
             if p==1:
-                if np.isinf(scores).all():
-                    print 'all_inf'
-                    print scores
+                for i in len(scores):
+                    if np.isinf(scores[i]).all():
+                        print 'all_inf', i
+                        print scores[i]
 
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
