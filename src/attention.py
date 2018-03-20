@@ -176,12 +176,7 @@ class MT:
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([scores, cur_mask], axis=0)
             if p==1:
-                all_inf = True
-                for sc in scores:
-                    if  not np.isinf(sc):
-                        all_inf = False
-                        break
-                if all_inf:
+                if np.isinf(scores).all():
                     print 'all_inf'
                     print scores
 
