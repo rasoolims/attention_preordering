@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser.add_option("--stop", type="int", dest="stop", default=50)
     parser.add_option("--dynet-mem", type="int", dest="mem", default=0)
     parser.add_option("--dynet-autobatch", type="int", dest="dynet-autobatch", default=0)
-    parser.add_option("--dynet-l2", type="int", dest="dynet-l2", default=0)
+    parser.add_option("--dynet-l2", type="float", dest="dynet-l2", default=0)
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
 
 (options, args) = parser.parse_args()
