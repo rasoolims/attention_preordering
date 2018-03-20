@@ -180,6 +180,7 @@ class MT:
                     if np.isinf(scores[i]).all():
                         print 'all_inf', i
                         print scores[i]
+                        print cur_mask[i]
 
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
