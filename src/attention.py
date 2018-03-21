@@ -179,7 +179,9 @@ class MT:
             if p == 1:
                 for i in range(len(scores)):
                     if np.isinf(scores[i]).all():
-                        if not uaw_v:
+                        print 'len_word', len(words)
+                        print 'scores_shape',scores.shape
+                        if uaw_v is None:
                             uaw_v = (uaw).npvalue().reshape((mask.shape[0], mask.shape[1]))
                         print 'all_inf', i
                         print uaw_v[i]
