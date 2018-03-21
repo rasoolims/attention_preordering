@@ -172,15 +172,16 @@ class MT:
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             s = s.add_input(vector)
 
-            scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            raw_scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
-            scores = np.sum([scores, cur_mask], axis=0)
-            if p==1:
+            scores = np.sum([raw_scores, cur_mask], axis=0)
+            if p == 1:
                 for i in range(len(scores)):
                     if np.isinf(scores[i]).all():
                         print 'all_inf', i
-                        print scores[i]
+                        print raw_scores[i]
                         print cur_mask[i]
+                        print scores[i]
 
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
@@ -190,7 +191,7 @@ class MT:
                 out[i][p] = position
             last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
             last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
-        dy.renew_cg()
+        dy.renew_cg(immediate_compute=True, check_validity=True)
         return out
 
     def get_loss(self, minibatch):
