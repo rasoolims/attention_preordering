@@ -114,7 +114,7 @@ class MT:
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
-        return att_weights
+        return att_weights, unnormalized
 
     def decode(self, encoded, output_words, output_tags, output_index, masks):
         input_mat = dy.concatenate_cols(encoded)
@@ -130,7 +130,7 @@ class MT:
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            att_weights = self.attend(s, w1dt, True)
+            att_weights, _ = self.attend(s, w1dt, True)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             vector = dy.dropout(vector, self.options.dropout)
             s = s.add_input(vector)
@@ -168,17 +168,21 @@ class MT:
         for p in range(len(words)):
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            att_weights = self.attend(s, w1dt, False)
+            att_weights, uaw = self.attend(s, w1dt, False)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             s = s.add_input(vector)
 
             raw_scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([raw_scores, cur_mask], axis=0)
+            uaw_v = None
             if p == 1:
                 for i in range(len(scores)):
                     if np.isinf(scores[i]).all():
+                        if not uaw_v:
+                            uaw_v = (uaw).npvalue().reshape((mask.shape[0], mask.shape[1]))
                         print 'all_inf', i
+                        print uaw_v[i]
                         print raw_scores[i]
                         print cur_mask[i]
                         print scores[i]
