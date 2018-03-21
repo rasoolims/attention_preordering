@@ -175,13 +175,6 @@ class MT:
             scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([scores, cur_mask], axis=0)
-            if p==1:
-                for i in range(len(scores)):
-                    if np.isinf(scores[i]).all():
-                        print 'all_inf', i
-                        print scores[i]
-                        print cur_mask[i]
-
             next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
             next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
@@ -218,7 +211,7 @@ class MT:
             loss = self.get_loss(minibatch)
             loss_sum += self.backpropagate(loss)
             b += 1
-            dy.renew_cg()
+            dy.renew_cg(immediate_compute=True, check_validity=True)
             loss = []
             if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
