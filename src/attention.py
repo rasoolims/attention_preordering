@@ -175,12 +175,14 @@ class MT:
             raw_scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
             scores = np.sum([raw_scores, cur_mask], axis=0)
+            next_positions = np.argmax(scores, axis=0)
             uaw_v = None
             if p == 1:
                 for i in range(len(scores)):
                     if np.isinf(scores[i]).all():
                         print 'len_word', len(words)
                         print 'scores_shape',scores.shape
+                        print 'next_pos_shape', next_positions.shape
                         if uaw_v is None:
                             uaw_v = (uaw).npvalue().reshape((mask.shape[0], mask.shape[1]))
                         print 'all_inf', i
@@ -189,7 +191,6 @@ class MT:
                         print cur_mask[i]
                         print scores[i]
 
-            next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
             next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
             for i, position in enumerate(next_positions):
