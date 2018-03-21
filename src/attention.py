@@ -114,7 +114,7 @@ class MT:
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
-        return att_weights, unnormalized
+        return att_weights
 
     def decode(self, encoded, output_words, output_tags, output_index, masks):
         input_mat = dy.concatenate_cols(encoded)
@@ -130,7 +130,7 @@ class MT:
             # w1dt can be computed and cached once for the entire decoding phase
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            att_weights, _ = self.attend(s, w1dt, True)
+            att_weights = self.attend(s, w1dt, True)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             vector = dy.dropout(vector, self.options.dropout)
             s = s.add_input(vector)
@@ -168,29 +168,21 @@ class MT:
         for p in range(len(words)):
             # w1dt can be computed and cached once for the entire decoding phase
             w1dt = w1dt or self.attention_w1.expr() * input_mat
-            att_weights, uaw = self.attend(s, w1dt, False)
+            att_weights = self.attend(s, w1dt, False)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
             s = s.add_input(vector)
 
-            raw_scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
+            scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
             cur_mask = first_mask if p == 0 else mask
-            scores = np.sum([raw_scores, cur_mask], axis=0)
-            next_positions = np.argmax(scores, axis=0)
-            uaw_v = None
-            if p == 1:
+            scores = np.sum([scores, cur_mask], axis=0)
+            if p==1:
                 for i in range(len(scores)):
                     if np.isinf(scores[i]).all():
-                        print 'len_word', len(words)
-                        print 'scores_shape',scores.shape
-                        print 'next_pos_shape', next_positions.shape
-                        if uaw_v is None:
-                            uaw_v = (uaw).npvalue().reshape((mask.shape[0], mask.shape[1]))
                         print 'all_inf', i
-                        print uaw_v[i]
-                        print raw_scores[i]
-                        print cur_mask[i]
                         print scores[i]
+                        print cur_mask[i]
 
+            next_positions = np.argmax(scores, axis=0)
             next_words = [words[position][i] for i, position in enumerate(next_positions)]
             next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
             for i, position in enumerate(next_positions):
@@ -198,7 +190,7 @@ class MT:
                 out[i][p] = position
             last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
             last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
-        dy.renew_cg(immediate_compute=True, check_validity=True)
+        dy.renew_cg()
         return out
 
     def get_loss(self, minibatch):
@@ -226,7 +218,7 @@ class MT:
             loss = self.get_loss(minibatch)
             loss_sum += self.backpropagate(loss)
             b += 1
-            dy.renew_cg(immediate_compute=True, check_validity=True)
+            dy.renew_cg()
             loss = []
             if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
