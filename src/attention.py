@@ -83,7 +83,7 @@ class MT:
 
         wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
-        if not is_train:
+        if (not is_train) or self.options.dropout == 0:
             return [dy.concatenate([wembed[i], posembed[i]]) for i in range(len(ts))]
         else:
             emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
@@ -109,7 +109,7 @@ class MT:
         # w1dt: (attdim x seqlen)
         # w2dt: (attdim x attdim)
         w2dt = self.attention_w2.expr() * dy.concatenate(list(state.s()))
-        if is_train:
+        if is_train and self.options.dropout > 0:
             w2dt = dy.dropout(w2dt, self.options.dropout)
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
@@ -132,7 +132,8 @@ class MT:
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, True)
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
-            vector = dy.dropout(vector, self.options.dropout)
+            if self.options.dropout > 0:
+                vector = dy.dropout(vector, self.options.dropout)
             s = s.add_input(vector)
             last_output_embeddings = dy.lookup_batch(self.wlookup, word)
             last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[p])
