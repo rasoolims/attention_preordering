@@ -55,6 +55,7 @@ class MT:
         self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, options.phdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
+        self.trainer.set_clip_threshold(1.0)
 
         def _emb_mask_generator(seq_len, batch_size):
             ret = []
