@@ -74,16 +74,15 @@ class MT:
         self.generate_emb_mask = _emb_mask_generator
 
     def embed_sentence(self, ws, pwords, ts, chars, is_train):
-        # cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
-        # char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
-        #                       self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
-        # crnn = dy.reshape(dy.concatenate_cols([char_fwd, char_bckd]), (self.options.we, ws.shape[0] * ws.shape[1]))
-        # cnn_reps = [list() for _ in range(len(ws))]
-        # for i in range(ws.shape[0]):
-        #     cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
-        #
-        # wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
-        wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) for i in range(len(ws))]
+        cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
+        char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
+                              self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
+        crnn = dy.reshape(dy.concatenate_cols([char_fwd, char_bckd]), (self.options.we, ws.shape[0] * ws.shape[1]))
+        cnn_reps = [list() for _ in range(len(ws))]
+        for i in range(ws.shape[0]):
+            cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
+
+        wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
         if (not is_train) or self.options.dropout == 0:
             return [dy.concatenate([wembed[i], posembed[i]]) for i in range(len(ts))]
@@ -214,7 +213,7 @@ class MT:
             loss = self.get_loss(minibatch)
             loss_sum += self.backpropagate(loss)
             b += 1
-            dy.renew_cg(immediate_compute=True, check_validity=True)
+            dy.renew_cg()
             loss = []
             if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
