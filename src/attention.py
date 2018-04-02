@@ -361,7 +361,7 @@ class MT:
                     new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings,
                                                 beam_elem.score + next_score)
                     current_beam.append(new_beam_elem)
-            beamElements = current_beam.sort()[:beam_size]
+            beamElements = sorted(current_beam)[:beam_size]
 
         out_val = beamElements.sort()[0].out
         dy.renew_cg()
