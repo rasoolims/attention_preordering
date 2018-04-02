@@ -333,7 +333,6 @@ class MT:
             current_beam = []
             print 'P',p
             for beam_elem in beamElements:
-                print beam_elem.mask
                 s = beam_elem.decoder_lstm
                 # w1dt can be computed and cached once for the entire decoding phase
                 att_weights = self.attend(s, w1dt, False)
