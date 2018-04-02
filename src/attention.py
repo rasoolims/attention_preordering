@@ -360,12 +360,11 @@ class MT:
                     new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings,
                                                 beam_elem.score + next_score if p<len(words)-1 else beam_elem.score)
                     current_beam.append(new_beam_elem)
-            # print len(current_beam)
-            # print [b.score for b in current_beam]
+            print [b.score for b in current_beam]
             beamElements = sorted(current_beam, reverse=True)[:beam_size]
-            # print [b.score for b in beamElements]
-            # print [b.out for b in beamElements]
-            # print '*****'
+            print [b.score for b in beamElements]
+            print [b.out for b in beamElements]
+            print '*****'
         out_val = sorted(current_beam)[0].out
         print out_val
         dy.renew_cg()
