@@ -331,8 +331,9 @@ class MT:
 
         for p in range(1, len(words)):
             current_beam = []
-
+            print 'P',p
             for beam_elem in beamElements:
+                print beam_elem.mask
                 s = beam_elem.decoder_lstm
                 # w1dt can be computed and cached once for the entire decoding phase
                 att_weights = self.attend(s, w1dt, False)
@@ -342,8 +343,8 @@ class MT:
 
                 scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
                 scores = np.sum([scores, beam_elem.mask], axis=0)
-                print np.argsort(scores, axis=0)
-                print np.sort(scores, axis=0)
+                # print np.argsort(scores, axis=0)
+                # print np.sort(scores, axis=0)
                 next_best_positions = np.argsort(scores, axis=0)[-beam_size:][::-1]
                 best_scores = np.sort(scores, axis=0)[-beam_size:][::-1]
 
