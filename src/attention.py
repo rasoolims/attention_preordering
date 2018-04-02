@@ -365,7 +365,6 @@ class MT:
             beamElements = sorted(current_beam, reverse=True)[:beam_size]
             print [b.score for b in beamElements]
             print [b.out for b in beamElements]
-            print [b.mask for b in beamElements]
             print '*****'
         out_val = sorted(current_beam)[0].out
         print out_val
