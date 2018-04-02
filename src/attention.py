@@ -365,7 +365,7 @@ class MT:
             # print [b.score for b in beamElements]
             # print [b.out for b in beamElements]
             # print '*****'
-        out_val = sorted(current_beam)[0].out
+        out_val = sorted(current_beam, reverse=True)[0].out
         print out_val
         dy.renew_cg()
         return out_val
