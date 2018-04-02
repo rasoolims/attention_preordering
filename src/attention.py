@@ -254,12 +254,12 @@ class MT:
         sys.stdout.write(str(d) + '\n')
         writer.close()
 
-    def reorder_tree(self, batches, trees, out_file):
+    def reorder_tree(self, batches, trees, out_file, beamsize):
         writer = codecs.open(out_file, 'w')
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
-            for order in self.get_output_int(minibatch):
+            for order in self.get_output_int(minibatch, beamsize):
                 new_trees.append(trees[t_num].reorder(order))
                 t_num += 1
             if (d + 1) % 100 == 0:
