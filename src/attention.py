@@ -342,6 +342,8 @@ class MT:
 
                 scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
                 scores = np.sum([scores, beam_elem.mask], axis=0)
+                print scores.argsort()
+                print scores.sort()
                 next_best_positions = scores.argsort()[-beam_size:][::-1]
                 best_scores = scores.sort()[-beam_size:][::-1]
 
