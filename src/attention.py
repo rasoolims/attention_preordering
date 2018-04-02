@@ -362,7 +362,7 @@ class MT:
                     current_beam.append(new_beam_elem)
             print len(current_beam)
             print [b.score for b in current_beam]
-            beamElements = sorted(current_beam)[:beam_size]
+            beamElements = sorted(current_beam, reverse=True)[:beam_size]
             print [b.score for b in beamElements]
             print [b.out for b in beamElements]
             print [b.mask for b in beamElements]
