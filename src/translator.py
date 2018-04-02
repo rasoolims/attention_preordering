@@ -29,6 +29,7 @@ if __name__ == '__main__':
     parser.add_option("--phdim", type="int", dest="phdim", default=200)
     parser.add_option("--attention", type="int", dest="attention", default=200)
     parser.add_option("--min_freq", type="int", dest="min_freq", default=1)
+    parser.add_option("--beam", type="int", dest="beam_size", default=1)
     parser.add_option("--predict", action="store_true", dest="predictFlag", default=False)
     parser.add_option("--eval_non_avg", action="store_true", dest="eval_non_avg", default=False)
     parser.add_option("--no_anneal", action="store_false", dest="anneal", default=True)
@@ -83,4 +84,4 @@ if options.test_file and options.output_file:
         test_buckets[0].append(d)
     t.options.batch = options.batch
     test_batches = utils.get_batches(test_buckets, t, False)
-    t.reorder_tree(test_batches, trees, options.output_file)
+    t.reorder_tree(test_batches, trees, options.output_file, options.beam_size)
