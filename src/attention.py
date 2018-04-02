@@ -9,7 +9,7 @@ class BeamElement:
         self.out = np.copy(out)
         self.last_output_embeddings = last_output_embeddings
         self.last_tag_embeddings = last_tag_embeddings
-        self.score = 0
+        self.score = score
 
     def __lt__(self, other):
         return self.score < other.score
