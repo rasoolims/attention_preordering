@@ -360,6 +360,7 @@ class MT:
                     new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings,
                                                 beam_elem.score + next_score)
                     current_beam.append(new_beam_elem)
+            print len(current_beam)
             print [b.score for b in current_beam]
             beamElements = sorted(current_beam)[:beam_size]
             print [b.score for b in beamElements]
