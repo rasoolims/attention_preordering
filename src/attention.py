@@ -329,7 +329,7 @@ class MT:
         first_beam_element = BeamElement(s, mask, out, last_output_embeddings, last_tag_embeddings)
         beamElements = [first_beam_element]
 
-        for p in range(1, len(words)):
+        for p in range(1, len(words) - 1):
             current_beam = []
             print 'P',p
             for beam_elem in beamElements:
@@ -365,7 +365,14 @@ class MT:
             print [b.score for b in beamElements]
             print [b.out for b in beamElements]
             print '*****'
-        out_val = sorted(current_beam)[0].out
-        print out_val
+
+        beam_elem = sorted(current_beam, reverse=True)[0]
+        att_weights = self.attend(beam_elem.decoder_lstm, w1dt, False)
+        scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
+        scores = np.sum([scores, beam_elem.mask], axis=0)
+        next_positions = np.argmax(scores, axis=0)
+        for i, position in enumerate(next_positions):
+            new_out[i][p] = position
+        print new_out
         dy.renew_cg()
-        return out_val
+        return new_out
