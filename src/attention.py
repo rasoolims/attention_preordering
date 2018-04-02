@@ -363,6 +363,6 @@ class MT:
                     current_beam.append(new_beam_elem)
             beamElements = sorted(current_beam)[:beam_size]
 
-        out_val = beamElements.sort()[0].out
+        out_val = sorted(current_beam)[0].out
         dy.renew_cg()
         return out_val
