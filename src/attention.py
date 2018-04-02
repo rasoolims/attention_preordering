@@ -340,7 +340,7 @@ class MT:
                     [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings])
                 s = s.add_input(vector)
 
-                scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
+                scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
                 scores = np.sum([scores, beam_elem.mask], axis=0)
                 print scores
                 print np.argsort(scores, axis=0)
