@@ -368,5 +368,6 @@ class MT:
             print [b.mask for b in beamElements]
             print '*****'
         out_val = sorted(current_beam)[0].out
+        print out_val
         dy.renew_cg()
         return out_val
