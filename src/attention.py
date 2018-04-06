@@ -366,7 +366,7 @@ class MT:
                 s = beam_elem.decoder_lstm
                 att_weights = self.attend(s, w1dt, False)
                 vector = dy.concatenate(
-                    [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings])
+                    [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings, beam_elem.last_rel_embeddings])
                 s = s.add_input(vector)
 
                 scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
