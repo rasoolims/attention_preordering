@@ -40,6 +40,7 @@ if __name__ == '__main__':
     parser.add_option("--dynet-mem", type="int", dest="mem", default=0)
     parser.add_option("--dynet-autobatch", type="int", dest="dynet-autobatch", default=0)
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
+    parser.add_option("--beam", type="int", dest="beam_size", default=4)
 
 (options, args) = parser.parse_args()
 if options.train_file:
@@ -83,5 +84,6 @@ if options.test_file and options.output_file:
     for d in test_data:
         test_buckets[0].append(d)
     t.options.batch = options.batch
+    t.options.batch = 1  # options.batch --> correct for beam search
     test_batches = utils.get_batches(test_buckets, t, False)
-    t.reorder_tree(test_batches, trees, options.output_file)
+    t.reorder_tree(test_batches, trees, options.output_file, options.beam_size)

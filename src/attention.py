@@ -2,6 +2,24 @@ import dynet as dy
 import codecs, sys, time, gzip
 import numpy as np
 
+class BeamElement:
+    def __init__(self, decoder_lstm, mask, out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings, score=0):
+        self.decoder_lstm = decoder_lstm
+        self.mask = np.copy(mask)
+        self.out = np.copy(out)
+        self.last_output_embeddings = last_output_embeddings
+        self.last_tag_embeddings = last_tag_embeddings
+        self.last_rel_embeddings = last_rel_embeddings
+        self.score = score
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+    def __gt__(self, other):
+        return self.score > other.score
+
+    def __eq__(self, other):
+        return False
 
 class MT:
     def __init__(self, options, words, tags, relations, langs, chars):
@@ -102,8 +120,6 @@ class MT:
         #     emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
         #     return [dy.concatenate([dy.cmult(w, wm), dy.cmult(pos, posm), dy.cmult(rem,relm), dy.cmult(lem,langm)]) for w, pos,rem,lem, (wm, posm,relm, langm) in
         #               zip(wembed, posembed, relembed, langembed, emb_masks)]
-
-
 
     def encode_sentence(self, input_embeds, batch_size=None, dropout_x=0., dropout_h=0.):
         for fb, bb in self.encoder_bilstm.builder_layers:
@@ -217,8 +233,8 @@ class MT:
         encoded = self.encode_sentence(embedded,  words.shape[1],  self.options.dropout,  self.options.dropout)
         return self.decode(encoded, output_words, output_tags, output_rels, positions, masks)
 
-    def get_output_int(self, minibatch):
-        gen_out, masks = self.generate(minibatch), minibatch[-1]
+    def get_output_int(self, minibatch, beamsize):
+        gen_out, masks = self.generate_beam(minibatch, beamsize), minibatch[-1]
         out = [[gen_out[i][j] for j in range(1, len(gen_out[i])) if masks[j][i] == 1] for i in range(len(gen_out))]
         out = [o[:-1] for o in out]
         return out
@@ -260,12 +276,12 @@ class MT:
         sys.stdout.write(str(d) + '\n')
         writer.close()
 
-    def reorder_tree(self, batches, trees, out_file):
+    def reorder_tree(self, batches, trees, out_file, beamsize):
         writer = codecs.open(out_file, 'w')
         print 'get new order'
         new_trees, t_num = [], 0
         for d, minibatch in enumerate(batches):
-            for order in self.get_output_int(minibatch):
+            for order in self.get_output_int(minibatch, beamsize):
                 new_trees.append(trees[t_num].reorder(order))
                 t_num += 1
             if (d + 1) % 100 == 0:
@@ -288,3 +304,100 @@ class MT:
 
     def load(self, filename):
         self.model.populate(filename)
+
+    def generate_beam(self, minibatch, beam_size):
+        words, pwords, tags, rels, langs, _, _, _, heads, dependencies,_, chars, sen_lens, masks = minibatch
+        embedded = self.embed_sentence(words, pwords, tags, rels, langs, chars, False)
+        encoded = self.encode_sentence(embedded)
+        input_mat = dy.concatenate_cols(encoded)
+        w1dt = None
+
+        last_output_embeddings = dy.lookup_batch(self.wlookup, words[0])
+        last_tag_embeddings = dy.lookup_batch(self.tlookup, tags[0])
+        last_rel_embeddings = dy.lookup_batch(self.rlookup, rels[0])
+        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 2, len(words[0])), dtype=float)),
+                                  (self.options.hdim * 2,), len(words[0]))
+        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings, last_rel_embeddings]))
+
+        out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
+        first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
+        mask = np.zeros((words.shape[0], words.shape[1]), dtype=float)
+        first_mask[0] = np.array([0] * words.shape[1])
+        mask[0] = np.array([-float('inf')] * words.shape[1])
+        for m1 in range(masks.shape[0]):
+            for m2 in range(masks.shape[1]):
+                if masks[m1][m2] == 0:
+                    mask[m1][m2] = -float('inf')
+                if sen_lens[m2] - 1 <= m1:
+                    mask[m1][m2] = -float('inf')
+
+        w1dt = self.attention_w1.expr() * input_mat
+        att_weights = self.attend(s, w1dt, False)
+        vector = dy.concatenate(
+            [input_mat * att_weights, last_output_embeddings, last_tag_embeddings, last_rel_embeddings])
+        s = s.add_input(vector)
+
+        scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
+        cur_mask = first_mask if p == 0 else mask
+        scores = np.sum([scores, cur_mask], axis=0)
+        next_positions = np.argmax(scores, axis=0)
+        next_words = [words[position][i] for i, position in enumerate(next_positions)]
+        next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
+        next_out_rels = []
+        for i, position in enumerate(next_positions):
+            dep = dependencies[position][i]
+            if dep != '<EOS>':
+                direction = '-left' if mask[heads[position][i]][i] == 0 else '-right'
+                dep = dep + direction
+            next_out_rels.append(self.rel2int.get(dep, 0))
+
+        for i, position in enumerate(next_positions):
+            mask[position][i] = -float('inf')
+            out[i][0] = position
+        last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
+        last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
+        last_rel_embeddings = dy.lookup_batch(self.rlookup, next_out_rels)
+
+        first_beam_element = BeamElement(s, mask, out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings)
+        beamElements = [first_beam_element]
+        for p in range(1, len(words)):
+            current_beam = []
+
+            for beam_elem in beamElements:
+                s = beam_elem.decoder_lstm
+                att_weights = self.attend(s, w1dt, False)
+                vector = dy.concatenate(
+                    [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings])
+                s = s.add_input(vector)
+
+                scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
+                scores = np.sum([scores, beam_elem.mask], axis=0)
+                next_best_positions = np.argsort(scores, axis=0)[-beam_size:][::-1]
+                best_scores = np.sort(scores, axis=0)[-beam_size:][::-1]
+
+                for next_positions, next_score in zip(next_best_positions, best_scores):
+                    new_mask = np.copy(beam_elem.mask)
+                    new_out = np.copy(beam_elem.out)
+                    next_words = [words[position][i] for i, position in enumerate(next_positions)]
+                    next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
+                    next_out_rels = []
+                    for i, position in enumerate(next_positions):
+                        dep = dependencies[position][i]
+                        if dep != '<EOS>':
+                            direction = '-left' if mask[heads[position][i]][i] == 0 else '-right'
+                            dep = dep + direction
+                        next_out_rels.append(self.rel2int.get(dep, 0))
+
+                    for i, position in enumerate(next_positions):
+                        new_mask[position][i] = -float('inf')
+                        new_out[i][p] = position
+                    last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
+                    last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
+                    new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings,
+                                                beam_elem.score + next_score if p < len(words) - 1 else beam_elem.score)
+                    current_beam.append(new_beam_elem)
+                    # print [b.score for b in current_beam]
+            beamElements = sorted(current_beam, reverse=True)[:beam_size]
+        out_val = sorted(current_beam, reverse=True)[0].out
+        dy.renew_cg()
+        return out_val
