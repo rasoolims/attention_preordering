@@ -338,8 +338,7 @@ class MT:
         s = s.add_input(vector)
 
         scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
-        cur_mask = first_mask if p == 0 else mask
-        scores = np.sum([scores, cur_mask], axis=0)
+        scores = np.sum([scores, first_mask], axis=0)
         next_positions = np.argmax(scores, axis=0)
         next_words = [words[position][i] for i, position in enumerate(next_positions)]
         next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
