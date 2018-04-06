@@ -85,7 +85,7 @@ class MT:
                 tag_mask = np.random.binomial(1, 1. - self.options.dropout, batch_size).astype(np.float32)
                 rel_mask = np.random.binomial(1, 1. - self.options.dropout, batch_size).astype(np.float32)
                 lang_mask = np.random.binomial(1, 1. - self.options.dropout, batch_size).astype(np.float32)
-                scale = 7. / (4. * word_mask + tag_mask + rel_mask + lang_mask + 1e-12)
+                scale = 6. / (3. * word_mask + tag_mask + rel_mask + lang_mask + 1e-12)
                 word_mask *= scale
                 tag_mask *= scale
                 rel_mask *= scale
@@ -101,15 +101,16 @@ class MT:
         self.generate_emb_mask = _emb_mask_generator
 
     def embed_sentence(self, ws, pwords, ts, rels, langs, chars, is_train):
-        cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
-        char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
-                              self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
-        crnn = dy.reshape(dy.concatenate_cols([char_fwd, char_bckd]), (self.options.we, ws.shape[0] * ws.shape[1]))
-        cnn_reps = [list() for _ in range(len(ws))]
-        for i in range(ws.shape[0]):
-            cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
+        #cembed = [dy.lookup_batch(self.clookup, c) for c in chars]
+        #char_fwd, char_bckd = self.char_lstm.builder_layers[0][0].initial_state().transduce(cembed)[-1], \
+        #                      self.char_lstm.builder_layers[0][1].initial_state().transduce(reversed(cembed))[-1]
+        #crnn = dy.reshape(dy.concatenate_cols([char_fwd, char_bckd]), (self.options.we, ws.shape[0] * ws.shape[1]))
+        #cnn_reps = [list() for _ in range(len(ws))]
+        #for i in range(ws.shape[0]):
+        #    cnn_reps[i] = dy.pick_batch(crnn, [i * ws.shape[1] + j for j in range(ws.shape[1])], 1)
 
-        wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
+        #wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
+        wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) for i in range(len(ws))]
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
         relembed = [dy.lookup_batch(self.rlookup, rels[i]) for i in range(len(rels))]
         langembed = [dy.lookup_batch(self.llookup, langs[i]) for i in range(len(langs))]
