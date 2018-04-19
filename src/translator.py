@@ -31,7 +31,6 @@ if __name__ == '__main__':
     parser.add_option("--phdim", type="int", dest="phdim", default=200)
     parser.add_option("--attention", type="int", dest="attention", default=200)
     parser.add_option("--min_freq", type="int", dest="min_freq", default=1)
-    parser.add_option("--beam", type="int", dest="beam_size", default=4)
     parser.add_option("--predict", action="store_true", dest="predictFlag", default=False)
     parser.add_option("--eval_non_avg", action="store_true", dest="eval_non_avg", default=False)
     parser.add_option("--no_anneal", action="store_false", dest="anneal", default=True)
@@ -40,7 +39,6 @@ if __name__ == '__main__':
     parser.add_option("--stop", type="int", dest="stop", default=50)
     parser.add_option("--dynet-mem", type="int", dest="mem", default=0)
     parser.add_option("--dynet-autobatch", type="int", dest="dynet-autobatch", default=0)
-    parser.add_option("--dynet-l2", type="float", dest="dynet-l2", default=0)
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
     parser.add_option("--beam", type="int", dest="beam_size", default=4)
 
@@ -85,11 +83,7 @@ if options.test_file and options.output_file:
     trees, test_data = utils.read_tree_as_data(options.test_file)
     for d in test_data:
         test_buckets[0].append(d)
-<<<<<<< HEAD
-    t.options.batch = 1 # options.batch --> correct for beam search
-=======
     t.options.batch = options.batch
     t.options.batch = 1  # options.batch --> correct for beam search
->>>>>>> origin/node
     test_batches = utils.get_batches(test_buckets, t, False)
     t.reorder_tree(test_batches, trees, options.output_file, options.beam_size)

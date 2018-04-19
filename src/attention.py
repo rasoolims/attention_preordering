@@ -3,20 +3,13 @@ import codecs, sys, time, gzip
 import numpy as np
 
 class BeamElement:
-<<<<<<< HEAD
-    def __init__(self, decoder_lstm, mask, out, last_output_embeddings, last_tag_embeddings, score=0):
-=======
     def __init__(self, decoder_lstm, mask, out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings, score=0):
->>>>>>> origin/node
         self.decoder_lstm = decoder_lstm
         self.mask = np.copy(mask)
         self.out = np.copy(out)
         self.last_output_embeddings = last_output_embeddings
         self.last_tag_embeddings = last_tag_embeddings
-<<<<<<< HEAD
-=======
         self.last_rel_embeddings = last_rel_embeddings
->>>>>>> origin/node
         self.score = score
 
     def __lt__(self, other):
@@ -84,7 +77,6 @@ class MT:
         self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, options.phdim * self.LSTM_NUM_OF_LAYERS * 2))
         self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
-        self.trainer.set_clip_threshold(1.0)
 
         def _emb_mask_generator(seq_len, batch_size):
             ret = []
@@ -120,16 +112,6 @@ class MT:
         #wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) + cnn_reps[i] for i in range(len(ws))]
         wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) for i in range(len(ws))]
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
-<<<<<<< HEAD
-        if (not is_train) or self.options.dropout == 0:
-            return [dy.concatenate([wembed[i], posembed[i]]) for i in range(len(ts))]
-        else:
-            emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
-            return [dy.concatenate([dy.cmult(w, wm), dy.cmult(pos, posm)]) for w, pos, (wm, posm) in
-                      zip(wembed, posembed, emb_masks)]
-
-
-=======
         relembed = [dy.lookup_batch(self.rlookup, rels[i]) for i in range(len(rels))]
         langembed = [dy.lookup_batch(self.llookup, langs[i]) for i in range(len(langs))]
         return [dy.concatenate([wembed[i], posembed[i], relembed[i], langembed[i]]) for i in range(len(ts))]
@@ -139,7 +121,6 @@ class MT:
         #     emb_masks = self.generate_emb_mask(ws.shape[0], ws.shape[1])
         #     return [dy.concatenate([dy.cmult(w, wm), dy.cmult(pos, posm), dy.cmult(rem,relm), dy.cmult(lem,langm)]) for w, pos,rem,lem, (wm, posm,relm, langm) in
         #               zip(wembed, posembed, relembed, langembed, emb_masks)]
->>>>>>> origin/node
 
     def encode_sentence(self, input_embeds, batch_size=None, dropout_x=0., dropout_h=0.):
         for fb, bb in self.encoder_bilstm.builder_layers:
@@ -158,13 +139,8 @@ class MT:
         # w1dt: (attdim x seqlen)
         # w2dt: (attdim x attdim)
         w2dt = self.attention_w2.expr() * dy.concatenate(list(state.s()))
-<<<<<<< HEAD
-        if is_train and self.options.dropout > 0:
-            w2dt = dy.dropout(w2dt, self.options.dropout)
-=======
         # if is_train:
         #     w2dt = dy.dropout(w2dt, self.options.dropout)
->>>>>>> origin/node
         # att_weights: (seqlen,) row vector
         unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
         att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
@@ -186,14 +162,8 @@ class MT:
             mask_tensor = dy.reshape(dy.inputTensor(masks[p]), (1,), len(masks[p]))
             w1dt = w1dt or self.attention_w1.expr() * input_mat
             att_weights = self.attend(s, w1dt, True)
-<<<<<<< HEAD
-            vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
-            if self.options.dropout > 0:
-                vector = dy.dropout(vector, self.options.dropout)
-=======
             vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings, last_rel_embeddings])
             # vector = dy.dropout(vector, self.options.dropout)
->>>>>>> origin/node
             s = s.add_input(vector)
             last_output_embeddings = dy.lookup_batch(self.wlookup, word)
             last_tag_embeddings = dy.lookup_batch(self.tlookup, output_tags[p])
@@ -337,30 +307,18 @@ class MT:
         self.model.populate(filename)
 
     def generate_beam(self, minibatch, beam_size):
-<<<<<<< HEAD
-        words, pwords, tags, _, _, _, chars, sen_lens, masks = minibatch
-        embedded = self.embed_sentence(words, pwords, tags, chars, False)
-=======
         words, pwords, tags, rels, langs, _, _, _, heads, dependencies,_, chars, sen_lens, masks = minibatch
         embedded = self.embed_sentence(words, pwords, tags, rels, langs, chars, False)
->>>>>>> origin/node
         encoded = self.encode_sentence(embedded)
         input_mat = dy.concatenate_cols(encoded)
         w1dt = None
 
         last_output_embeddings = dy.lookup_batch(self.wlookup, words[0])
         last_tag_embeddings = dy.lookup_batch(self.tlookup, tags[0])
-<<<<<<< HEAD
-        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 2, len(words[0])), dtype=float)),
-                                  (self.options.hdim * 2,), len(words[0]))
-        s = self.dec_lstm.initial_state().add_input(
-            dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings]))
-=======
         last_rel_embeddings = dy.lookup_batch(self.rlookup, rels[0])
         empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 2, len(words[0])), dtype=float)),
                                   (self.options.hdim * 2,), len(words[0]))
         s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor, last_output_embeddings, last_tag_embeddings, last_rel_embeddings]))
->>>>>>> origin/node
 
         out = np.zeros((words.shape[1], words.shape[0]), dtype=int)
         first_mask = np.full((words.shape[0], words.shape[1]), -float('inf'), dtype=float)
@@ -374,19 +332,6 @@ class MT:
                 if sen_lens[m2] - 1 <= m1:
                     mask[m1][m2] = -float('inf')
 
-<<<<<<< HEAD
-        w1dt = w1dt or self.attention_w1.expr() * input_mat
-        att_weights = self.attend(s, w1dt, False)
-        vector = dy.concatenate([input_mat * att_weights, last_output_embeddings, last_tag_embeddings])
-        s = s.add_input(vector)
-
-        scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
-        cur_mask = first_mask
-        scores = np.sum([scores, cur_mask], axis=0)
-        next_positions = np.argmax(scores, axis=0)
-        next_words = [words[position][i] for i, position in enumerate(next_positions)]
-        next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
-=======
         w1dt = self.attention_w1.expr() * input_mat
         att_weights = self.attend(s, w1dt, False)
         vector = dy.concatenate(
@@ -406,27 +351,11 @@ class MT:
                 dep = dep + direction
             next_out_rels.append(self.rel2int.get(dep, 0))
 
->>>>>>> origin/node
         for i, position in enumerate(next_positions):
             mask[position][i] = -float('inf')
             out[i][0] = position
         last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
         last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
-<<<<<<< HEAD
-
-        first_beam_element = BeamElement(s, mask, out, last_output_embeddings, last_tag_embeddings)
-        beamElements = [first_beam_element]
-
-        for p in range(1, len(words)):
-            current_beam = []
-            # print 'P',p
-            for beam_elem in beamElements:
-                s = beam_elem.decoder_lstm
-                # w1dt can be computed and cached once for the entire decoding phase
-                att_weights = self.attend(s, w1dt, False)
-                vector = dy.concatenate(
-                    [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings])
-=======
         last_rel_embeddings = dy.lookup_batch(self.rlookup, next_out_rels)
 
         first_beam_element = BeamElement(s, mask, out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings)
@@ -439,16 +368,10 @@ class MT:
                 att_weights = self.attend(s, w1dt, False)
                 vector = dy.concatenate(
                     [input_mat * att_weights, beam_elem.last_output_embeddings, beam_elem.last_tag_embeddings, beam_elem.last_rel_embeddings])
->>>>>>> origin/node
                 s = s.add_input(vector)
 
                 scores = (dy.log(att_weights)).npvalue().reshape((mask.shape[0], mask.shape[1]))
                 scores = np.sum([scores, beam_elem.mask], axis=0)
-<<<<<<< HEAD
-                # print np.argsort(scores, axis=0)
-                # print np.sort(scores, axis=0)
-=======
->>>>>>> origin/node
                 next_best_positions = np.argsort(scores, axis=0)[-beam_size:][::-1]
                 best_scores = np.sort(scores, axis=0)[-beam_size:][::-1]
 
@@ -457,8 +380,6 @@ class MT:
                     new_out = np.copy(beam_elem.out)
                     next_words = [words[position][i] for i, position in enumerate(next_positions)]
                     next_tags = [tags[position][i] for i, position in enumerate(next_positions)]
-<<<<<<< HEAD
-=======
                     next_out_rels = []
                     for i, position in enumerate(next_positions):
                         dep = dependencies[position][i]
@@ -467,26 +388,11 @@ class MT:
                             dep = dep + direction
                         next_out_rels.append(self.rel2int.get(dep, 0))
 
->>>>>>> origin/node
                     for i, position in enumerate(next_positions):
                         new_mask[position][i] = -float('inf')
                         new_out[i][p] = position
                     last_output_embeddings = dy.lookup_batch(self.wlookup, next_words)
                     last_tag_embeddings = dy.lookup_batch(self.tlookup, next_tags)
-<<<<<<< HEAD
-                    new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings,
-                                                beam_elem.score + next_score if p<len(words)-1 else beam_elem.score)
-                    current_beam.append(new_beam_elem)
-            # print [b.score for b in current_beam]
-            beamElements = sorted(current_beam, reverse=True)[:beam_size]
-            # print [b.score for b in beamElements]
-            # print [b.out for b in beamElements]
-            # print '*****'
-        out_val = sorted(current_beam, reverse=True)[0].out
-        # print out_val
-        dy.renew_cg()
-        return out_val
-=======
                     new_beam_elem = BeamElement(s, new_mask, new_out, last_output_embeddings, last_tag_embeddings, last_rel_embeddings,
                                                 beam_elem.score + next_score if p < len(words) - 1 else beam_elem.score)
                     current_beam.append(new_beam_elem)
@@ -495,4 +401,3 @@ class MT:
         out_val = sorted(current_beam, reverse=True)[0].out
         dy.renew_cg()
         return out_val
->>>>>>> origin/node
