@@ -6,6 +6,7 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--train", dest="train_file", metavar="FILE", default=None)
     parser.add_option("--train_t", dest="train_t", metavar="FILE", default=None)
+    parser.add_option("--train_v", dest="train_v", metavar="FILE", default=None)
     parser.add_option("--test", dest="test_file", metavar="FILE", default=None)
     parser.add_option("--output", dest="output_file",  metavar="FILE", default=None)
     parser.add_option("--extrn", dest="external_embedding", help="External embeddings", metavar="FILE")
@@ -15,7 +16,8 @@ if __name__ == '__main__':
     parser.add_option("--batch", type="int", dest="batch", default=5000)
     parser.add_option("--pe", type="int", dest="pe", default=100)
     parser.add_option("--ce", type="int", dest="ce", default=100)
-    parser.add_option("--re", type="int", dest="re", default=25)
+    parser.add_option("--re", type="int", dest="re", default=50)
+    parser.add_option("--le", type="int", dest="le", default=50)
     parser.add_option("--t", type="int", dest="t", default=50000)
     parser.add_option("--epoch", type="int", dest="epoch", default=1000)
     parser.add_option("--lr", type="float", dest="lr", default=0.001)
@@ -40,11 +42,12 @@ if __name__ == '__main__':
     parser.add_option("--dynet-autobatch", type="int", dest="dynet-autobatch", default=0)
     parser.add_option("--dynet-l2", type="float", dest="dynet-l2", default=0)
     parser.add_option("--dynet-gpus", action="store_true", dest="dynet-gpus", default=False, help='Use GPU instead of cpu.')
+    parser.add_option("--beam", type="int", dest="beam_size", default=4)
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    train_data, dev_data = utils.split_data(options.train_file, options.train_t, options.dev_percent)
-    words, tags, chars = utils.vocab(train_data, options.min_freq)
+    train_data, dev_data = utils.split_data(options.train_file, options.train_t, options.train_v, options.dev_percent)
+    words, tags, relations, langs, chars = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
     buckets = [list() for i in range(min_len, max_len)]
@@ -55,8 +58,8 @@ if options.train_file:
         dev_buckets[0].append(d)
 
     with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
-        pickle.dump((words, tags, chars, options), paramsfp)
-    t = MT(options, words, tags, chars)
+        pickle.dump((words, tags, relations, langs, chars, options), paramsfp)
+    t = MT(options, words, tags, relations, langs, chars)
 
     dev_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
@@ -74,14 +77,19 @@ if options.train_file:
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
-        words, tags, chars, stored_options = pickle.load(paramsfp)
+        words, tags, relations, langs, chars, stored_options = pickle.load(paramsfp)
     stored_options.external_embedding = options.external_embedding
-    t = MT(stored_options, words, tags, chars)
+    t = MT(stored_options, words, tags, relations, langs, chars)
     t.load(os.path.join(options.outdir, options.model))
     test_buckets = [list()]
     trees, test_data = utils.read_tree_as_data(options.test_file)
     for d in test_data:
         test_buckets[0].append(d)
+<<<<<<< HEAD
     t.options.batch = 1 # options.batch --> correct for beam search
+=======
+    t.options.batch = options.batch
+    t.options.batch = 1  # options.batch --> correct for beam search
+>>>>>>> origin/node
     test_batches = utils.get_batches(test_buckets, t, False)
     t.reorder_tree(test_batches, trees, options.output_file, options.beam_size)
