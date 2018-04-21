@@ -6,7 +6,6 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("--train", dest="train_file", metavar="FILE", default=None)
     parser.add_option("--train_t", dest="train_t", metavar="FILE", default=None)
-    parser.add_option("--train_v", dest="train_v", metavar="FILE", default=None)
     parser.add_option("--test", dest="test_file", metavar="FILE", default=None)
     parser.add_option("--output", dest="output_file",  metavar="FILE", default=None)
     parser.add_option("--extrn", dest="external_embedding", help="External embeddings", metavar="FILE")
@@ -27,6 +26,7 @@ if __name__ == '__main__':
     parser.add_option("--dev_percent", type="int", dest="dev_percent", default=10)
     parser.add_option("--outdir", type="string", dest="outdir", default="results")
     parser.add_option("--layer", type="int", dest="layer", default=3)
+    parser.add_option("--dep_layer", type="int", dest="dep_layer", default=2)
     parser.add_option("--hdim", type="int", dest="hdim", default=200)
     parser.add_option("--phdim", type="int", dest="phdim", default=200)
     parser.add_option("--attention", type="int", dest="attention", default=200)
@@ -44,8 +44,8 @@ if __name__ == '__main__':
 
 (options, args) = parser.parse_args()
 if options.train_file:
-    train_data, dev_data = utils.split_data(options.train_file, options.train_t, options.train_v, options.dev_percent)
-    words, tags, relations, langs, chars = utils.vocab(train_data, options.min_freq)
+    train_data, dev_data, relations = utils.split_data(options.train_file, options.train_t, options.dev_percent)
+    words, tags, langs = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
     buckets = [list() for i in range(min_len, max_len)]
@@ -56,15 +56,15 @@ if options.train_file:
         dev_buckets[0].append(d)
 
     with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
-        pickle.dump((words, tags, relations, langs, chars, options), paramsfp)
-    t = MT(options, words, tags, relations, langs, chars)
+        pickle.dump((words, tags, relations, langs, options), paramsfp)
+    t = MT(options, words, tags, relations, langs)
 
-    dev_batches = utils.get_batches(dev_buckets, t, False)
+    dev_batches, dev_dep_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
     iter = 0
     for i in range(options.epoch):
-        train_batches = utils.get_batches(buckets, t, True)
-        iter = t.train(train_batches, dev_batches, options.outdir+'/dev.out'+str(i+1), iter, options.batch)
+        train_batches, train_dep_batches = utils.get_batches(buckets, t, True)
+        iter = t.train(train_batches, train_dep_batches, dev_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
         if (i+1)%1==0:
             dev_ac = utils.eval_trigram(dev_data, options.outdir+'/dev.out'+str(i+1))
             print 'dev accuracy', dev_ac
@@ -75,9 +75,9 @@ if options.train_file:
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
-        words, tags, relations, langs, chars, stored_options = pickle.load(paramsfp)
+        words, tags, relations, langs, stored_options = pickle.load(paramsfp)
     stored_options.external_embedding = options.external_embedding
-    t = MT(stored_options, words, tags, relations, langs, chars)
+    t = MT(stored_options, words, tags, relations, langs)
     t.load(os.path.join(options.outdir, options.model))
     test_buckets = [list()]
     trees, test_data = utils.read_tree_as_data(options.test_file)

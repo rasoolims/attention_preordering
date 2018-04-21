@@ -15,19 +15,17 @@ def normalize(word):
 
 def vocab(train_data, min_count=2):
     word_counts = defaultdict(int)
-    tags, chars, relations, langs = set(), set(), set(), set()
+    tags, relations, langs = set(), set(), set()
     for data in train_data:
-        ws, ts, rels, _, _, _, lang_id = data[0]
+        ws, ows, ts, lang_id = data[0]
         for w in ws:
             word_counts[w] += 1
-            for c in list(w):
-                chars.add(c)
+        for w in ows:
+            word_counts[w] += 1
         for t in ts:
             tags.add(t)
-        for r in rels:
-            relations.add(r)
         langs.add(lang_id)
-    return [w for w in word_counts.keys() if word_counts[w]>min_count], list(tags), list(relations), list(langs), list(chars)
+    return [w for w in word_counts.keys() if word_counts[w] > min_count], list(tags), list(langs)
 
 
 def read_tree_as_data(tree_path):
@@ -46,31 +44,36 @@ def read_tree_as_data(tree_path):
     return trees, data
 
 
-def split_data(train_path, output_path, coutput_path, dev_percent):
+def split_data(train_path, output_path, dev_percent):
     trees = DepTree.load_trees_from_conll_file(train_path)
-    orders = codecs.open(output_path, 'r').read().strip().split('\n')
-    ctrees = DepTree.load_trees_from_conll_file(coutput_path)
+    orders = codecs.open(output_path, 'r').read().strip().split('\n\n')
     tdata, ddata = [], []
-    assert len(orders) == len(trees) == len(ctrees)
+    relations = set()
+    assert len(orders) == len(trees)
     for i in range(len(trees)):
-        tree, ctree = trees[i], ctrees[i]
-        order = [0] + [int(l) for l in orders[i].split()] + [len(orders[i].split()) + 1]
-        words, tags, rels, heads = tree.lemmas, tree.tags, tree.labels, tree.heads
-        cwords, ctags, crels, cheads = ctree.lemmas, ctree.tags, ctree.labels, ctree.heads
+        order = dict()
+        for ord in orders[i].strip().split('\n'):
+            fields = ord.strip().split('\t')
+            head = int(fields[0])
+            deps = [int(f) for f in fields[1].split(' ')]
+            rels = [f for f in fields[2].split(' ')]
+            r_deps = [int(f) for f in fields[3].split(' ')]
+            r_rels = [f for f in fields[4].split(' ')]
+            num_order = [int(f) for f in fields[5].split(' ')]
+            for rel in rels:
+                relations.add(rel)
+            order[head] = [deps, rels, r_deps, r_rels, num_order]
+
+        words, orig_words, tags= trees[i].words, trees[i].lemmas, trees[i].tags
         ws = ['<EOS>'] + [normalize(words[i]) for i in range(len(words))] + ['<EOS>']
-        cws = ['<EOS>'] + [normalize(cwords[i]) for i in range(len(cwords))] + ['<EOS>']
+        ows = ['<EOS>'] + [normalize(orig_words[i]) for i in range(len(orig_words))] + ['<EOS>']
         tags = ['<EOS>'] + tags + ['<EOS>']
-        ctags = ['<EOS>'] + ctags + ['<EOS>']
-        relations = ['<EOS>'] + [rels[i] + ('-left' if heads[i] >= i else '-right') for i in range(len(words))] + ['<EOS>']
-        crelations = ['<EOS>'] + [crels[i] + ('-left' if cheads[i] >= i else '-right') for i in range(len(cwords))] + ['<EOS>']
-        heads = [0] + [heads[i] for i in range(len(words))] + [0]
-        deps = ['<EOS>'] + [rels[i] for i in range(len(words))] + ['<EOS>']
-        data = (ws, tags, relations, cws, ctags, crelations, tree.lang_id)
+        data = (ws, ows, tags, trees[i].lang_id)
         if random.randint(0, 100) == dev_percent:
-            ddata.append((data, order, heads, deps))
+            ddata.append((data, order))
         else:
-            tdata.append((data, order, heads, deps))
-    return tdata, ddata
+            tdata.append((data, order))
+    return tdata, ddata, sorted(list(relations))
 
 
 def get_batches(buckets, model, is_train):
@@ -78,71 +81,87 @@ def get_batches(buckets, model, is_train):
     if is_train:
         for dc in d_copy:
             random.shuffle(dc)
-    mini_batches = []
-    batch, cur_len, cur_c_len = [], 0, 0
+    mini_batches, dep_mini_batches = [], []
+    batch, cur_len = [], 0
     for dc in d_copy:
         for d in dc:
             if (is_train and len(d[1])<=100) or not is_train:
                 batch.append(d)
-                cur_c_len = max(cur_c_len, max([len(w) for w in d[0][0]]))
                 cur_len = max(cur_len, len(d[0][0]))
-
             if cur_len * len(batch) >= model.options.batch:
-                add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model)
-                batch, cur_len, cur_c_len = [], 0, 0
+                add_to_minibatch(batch, cur_len, mini_batches, model)
+                add_to_dep_minibatch(batch, dep_mini_batches, model)
+                batch, cur_len = [], 0
 
     if len(batch)>0:
-        add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model)
-        batch, cur_len = [], 0
+        add_to_minibatch(batch, cur_len, mini_batches, model)
+        add_to_dep_minibatch(batch, dep_mini_batches, model)
     if is_train:
-        random.shuffle(mini_batches)
-    return mini_batches
+        c = list(zip(mini_batches, dep_mini_batches))
+        random.shuffle(c)
+        mini_batches, dep_mini_batches = zip(*c)
+    return mini_batches, dep_mini_batches
 
 
-def add_to_minibatch(batch, cur_c_len, cur_len, mini_batches, model):
+def add_to_minibatch(batch, cur_len, mini_batches, model):
     words = np.array([np.array(
         [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
     pwords = np.array([np.array(
         [model.evocab.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else 0 for i in
          range(len(batch))]) for j in range(cur_len)])
+    orig_words = np.array([np.array(
+        [model.w2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.w2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
+    orig_pwords = np.array([np.array(
+        [model.evocab.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else 0 for i in
+         range(len(batch))]) for j in range(cur_len)])
     pos = np.array([np.array(
-        [model.t2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.t2int[model.EOS] for i in
-         range(len(batch))]) for j in range(cur_len)])
-    rels = np.array([np.array(
-        [model.rel2int.get(batch[i][0][2][j], 0) if j < len(batch[i][0][2]) else model.rel2int[model.EOS] for i in
-         range(len(batch))]) for j in range(cur_len)])
-    positions = np.array([np.array([batch[i][1][j] if j < len(batch[i][1]) else model.PAD for i in range(len(batch))]) for j in range(cur_len)])
-    output_words = np.array([np.array(
-        [model.w2int.get(batch[i][0][3][j], 0) if j < len(batch[i][0][3]) else model.w2int[model.EOS] for i in
-         range(len(batch))]) for j in range(cur_len)])
-    output_tags = np.array([np.array(
-        [model.t2int.get(batch[i][0][4][j], 0) if j < len(batch[i][0][4]) else model.t2int[model.EOS] for i in
-         range(len(batch))]) for j in range(cur_len)])
-    output_rels = np.array([np.array(
-        [model.rel2int.get(batch[i][0][5][j], 0) if j < len(batch[i][0][5]) else model.rel2int[model.EOS] for i in
+        [model.t2int.get(batch[i][0][2][j], 0) if j < len(batch[i][0][2]) else model.t2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
     langs = np.array([np.array(
-        [model.lang2int.get(batch[i][0][6], 0) for i in range(len(batch))]) for j in range(cur_len)])
-    heads = np.array([np.array(
-        [batch[i][2][j] if j < len(batch[i][2]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    dependencies = np.array([np.array(
-        [batch[i][3][j] if j < len(batch[i][3]) else 'ROOT' for i in range(len(batch))]) for j in range(cur_len)])
+        [model.lang2int.get(batch[i][0][3], 0) for i in range(len(batch))]) for j in range(cur_len)])
 
-    chars = [list() for _ in range(cur_c_len)]
-    for c_pos in range(cur_c_len):
-        ch = [model.PAD] * (len(batch) * cur_len)
-        offset = 0
-        for w_pos in range(cur_len):
-            for sen_position in range(len(batch)):
-                if w_pos < len(batch[sen_position][0][0]) and c_pos < len(batch[sen_position][0][0][w_pos]):
-                    ch[offset] = model.c2int.get(batch[sen_position][0][0][w_pos][c_pos], 0)
-                offset += 1
-        chars[c_pos] = np.array(ch)
-    chars = np.array(chars)
     sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pwords, pos, rels, langs, output_words, output_tags, output_rels, heads, dependencies, positions, chars, sen_lens, masks))
+    mini_batches.append((words, pwords, orig_words, orig_pwords, pos, langs, sen_lens, masks))
+
+def add_to_dep_minibatch(batch, mini_batches, model):
+    dep_mini_batch_length = defaultdict(list)
+    for i in range(len(batch)):
+        order_dic = batch[i][1]
+        for head in order_dic.keys():
+            od, ol, ord, orl, numo = order_dic[head]
+            l = len(od)
+            dep_mini_batch_length[l].append((i, head, order_dic[head]))
+
+    dep_mini_batches = dict()
+    for l in dep_mini_batch_length.keys():
+        sen_ids = np.array([e[0] for e in dep_mini_batch_length[l]])
+        heads = np.array([e[1] for e in dep_mini_batch_length[l]])
+        deps = np.array([np.array([e[2][0][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
+        labels = np.array([np.array([model.rel2int.get(e[2][1][j], 0) for e in dep_mini_batch_length[l]]) for j in range(l)])
+        o_deps = np.array([np.array([e[2][2][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
+        o_labels = np.array([np.array([model.rel2int.get(e[2][3][j], 0) for e in dep_mini_batch_length[l]]) for j in range(l)])
+        num_orders = np.array([np.array([e[2][4][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
+
+        dep_mini_batches[l] = sen_ids, heads, deps, labels, o_deps, o_labels, num_orders
+    mini_batches.append(dep_mini_batches)
+
+    #   heads, deps, labels, r_deps, r_labels, sen_ids, num_order = [], [], [], [], [], [], []
+    #   for i in range(len(batch)):
+    #     order_dic = batch[i][1]
+    #     for head in order_dic.keys():
+    #         heads.append(head)
+    #         sen_ids.append(i)
+    #         od, ol, ord, orl, numo = order_dic[head]
+    #         deps.append(od)
+    #         labels.append([model.rel2int.get(rel, 0) for rel in ol])
+    #         r_deps.append(ord)
+    #         r_labels.append([model.rel2int.get(rel, 0) for rel in orl])
+    #         num_order.append(numo)
+    # mini_batches.append((heads, deps, labels, r_deps, r_labels, sen_ids, num_order))
+
 
 def create_string_output_from_order(order_file, dev_file, outfile):
     lines = codecs.open(order_file, 'r').read().strip().split('\n')
