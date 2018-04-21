@@ -64,14 +64,11 @@ if options.train_file:
     iter = 0
     for i in range(options.epoch):
         train_batches, train_dep_batches = utils.get_batches(buckets, t, True)
-        iter = t.train(train_batches, train_dep_batches, dev_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
-        if (i+1)%1==0:
-            dev_ac = utils.eval_trigram(dev_data, options.outdir+'/dev.out'+str(i+1))
-            print 'dev accuracy', dev_ac
-            if dev_ac > best_dev:
-                best_dev = dev_ac
-                print 'saving', best_dev
-                t.save(os.path.join(options.outdir, options.model))
+        iter, dev_acc = t.train(train_batches, train_dep_batches, dev_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
+        if dev_acc > best_dev:
+            best_dev = dev_acc
+            print 'saving', best_dev
+            t.save(os.path.join(options.outdir, options.model))
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:

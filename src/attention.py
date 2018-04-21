@@ -210,7 +210,6 @@ class MT:
             b += 1
             dy.renew_cg()
 
-            loss = []
             if b % 100 == 0:
                 progress = round((d_i + 1) * 100.0 / len(train_batches), 2)
                 print 'progress', str(progress), '%', 'loss', loss_sum / b, 'time', time.time() - start
@@ -231,9 +230,9 @@ class MT:
                 correct += np.sum(predicted == gold_orders)
                 all_outputs += predicted.shape[0] * predicted.shape[1]
             dy.renew_cg()
-        print 'dev accuracy', round(float(100 * correct) / all_outputs, 2)
-        
-        return t
+        dev_acc = round(float(100 * correct) / all_outputs, 2)
+        print 'dev accuracy', dev_acc
+        return t, dev_acc
 
     def reorder(self, batches, dep_minibatch,  out_file):
         writer = codecs.open(out_file, 'w')
