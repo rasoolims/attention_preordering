@@ -28,18 +28,44 @@ def vocab(train_data, min_count=2):
     return [w for w in word_counts.keys() if word_counts[w] > min_count], list(tags), list(langs)
 
 
+def get_order_data(tree, h):
+    data = []
+    if h > 0 and len(tree.reverse_tree[h]) > 0:
+        all_deps = sorted(list(tree.reverse_tree[h]) + [h])
+        all_relations = []
+        for d in all_deps:
+            if d == h:
+                all_relations.append('HEAD')
+            else:
+                all_relations.append(tree.labels[d - 1])
+
+        data.append((h, all_deps, all_relations))
+
+    for dep in tree.reverse_tree[h]:
+        data += get_order_data(tree, dep)
+
+    return data
+
 def read_tree_as_data(tree_path):
     trees = DepTree.load_trees_from_conll_file(tree_path)
     data = []
     for tree in trees:
-        words, tags, rels, heads = tree.lemmas, tree.tags, tree.labels, tree.heads
+        words, orig_words, tags = tree.words, tree.lemmas, tree.tags
         ws = ['<EOS>'] + [normalize(words[i]) for i in range(len(words))] + ['<EOS>']
+        ows = ['<EOS>'] + [normalize(orig_words[i]) for i in range(len(orig_words))] + ['<EOS>']
         tags = ['<EOS>'] + tags + ['<EOS>']
-        relations = ['<EOS>'] + [rels[i]+ ('-left' if heads[i] >=i else '-right') for i in range(len(words))]+ ['<EOS>']
-        heads = [0] + [heads[i] for i in range(len(words))] + [0]
-        deps = ['<EOS>'] + [rels[i] for i in range(len(words))] + ['<EOS>']
-        d = (ws, tags, relations, ws, tags, relations, tree.lang_id)
-        data.append((d, [int(l) for l in range(len(ws))], heads, deps))
+
+        d = (ws, ows, tags, tree.lang_id)
+        order_data = get_order_data(tree, 0)
+        order = dict()
+        for ord in order_data:
+            head = ord[0]
+            deps, r_deps = ord[1], ord[1]
+            rels, r_rels = ord[2], ord[2]
+            num_order = [i for i in range(len(deps))]
+            order[head] = [deps, rels, r_deps, r_rels, num_order]
+
+        data.append((d, order))
     assert len(data) == len(trees)
     return trees, data
 
@@ -65,8 +91,8 @@ def split_data(train_path, output_path, dev_percent):
             order[head] = [deps, rels, r_deps, r_rels, num_order]
 
         words, orig_words, tags= trees[i].words, trees[i].lemmas, trees[i].tags
-        ws = ['<EOS>'] + [normalize(words[i]) for i in range(len(words))] + ['<EOS>']
-        ows = ['<EOS>'] + [normalize(orig_words[i]) for i in range(len(orig_words))] + ['<EOS>']
+        ws = ['<EOS>'] + [normalize(words[j]) for j in range(len(words))] + ['<EOS>']
+        ows = ['<EOS>'] + [normalize(orig_words[j]) for j in range(len(orig_words))] + ['<EOS>']
         tags = ['<EOS>'] + tags + ['<EOS>']
         data = (ws, ows, tags, trees[i].lang_id)
         if random.randint(0, 100) == dev_percent:

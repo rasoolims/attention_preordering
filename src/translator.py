@@ -81,6 +81,5 @@ if options.test_file and options.output_file:
     for d in test_data:
         test_buckets[0].append(d)
     t.options.batch = options.batch
-    t.options.batch = 1  # options.batch --> correct for beam search
-    test_batches = utils.get_batches(test_buckets, t, False)
-    t.reorder_tree(test_batches, trees, options.output_file, options.beam_size)
+    test_batches, test_dep_batches = utils.get_batches(test_buckets, t, False)
+    t.reorder_tree(test_batches, test_dep_batches, trees, options.output_file)

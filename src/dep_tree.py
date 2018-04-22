@@ -132,3 +132,39 @@ class DepTree:
                 self.weight) + '\t_'
             lst.append(ln)
         return '\n'.join(lst)
+
+    def reorder_with_order(self, new_order):
+        new_words, new_lemmas, new_tags, new_heads, new_labels = [], [], [], [], []
+        rev_order = {0: 0, -1: -1}
+        for i, o in enumerate(new_order):
+            new_words.append(self.words[o - 1])
+            new_lemmas.append(self.lemmas[o - 1])
+            new_tags.append(self.tags[o - 1])
+            new_labels.append(self.labels[o - 1])
+            rev_order[o] = i + 1
+
+        for o in new_order:
+            new_head = rev_order[self.heads[o - 1]]
+            new_heads.append(new_head)
+
+        tree = DepTree(new_words, new_lemmas, new_tags, new_heads, new_labels)
+        tree.lang_id = self.lang_id
+        return tree
+
+    def get_linear_order(self, head, new_order):
+        current_order = []
+
+        if head in new_order:
+            for dep in new_order[head]:
+                if dep == head:
+                    current_order += [head]
+                else:
+                    current_order += self.get_linear_order(dep, new_order)
+        else:
+            if head == 0:
+                for dep in self.reverse_tree[head]:
+                    current_order += self.get_linear_order(dep, new_order)
+            else:
+                current_order = [head]
+
+        return current_order

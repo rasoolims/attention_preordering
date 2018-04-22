@@ -1,6 +1,7 @@
 import dynet as dy
 import codecs, sys, time, gzip
 import numpy as np
+from collections import defaultdict
 
 class MT:
     def __init__(self, options, words, tags, relations, langs):
@@ -243,17 +244,29 @@ class MT:
         sys.stdout.write(str(d) + '\n')
         writer.close()
 
-    def reorder_tree(self, batches, trees, out_file):
+    def reorder_tree(self, batches, dep_batches, trees, out_file):
         writer = codecs.open(out_file, 'w')
         print 'get new order'
         new_trees, t_num = [], 0
-        for d, minibatch in enumerate(batches):
-            for order in self.get_output_int(minibatch):
-                new_trees.append(trees[t_num].reorder(order))
-                t_num += 1
+        offset = 0
+        output_orders = defaultdict(dict)
+        for d in range(len(batches)):
+            output = self.generate(batches[d], dep_batches[d])
+            max_id = 0
+            for i, length in enumerate(dep_batches[d].keys()):
+                sen_ids, heads, deps, labels, _, _, _ = dep_batches[d][length]
+                max_id = max(max_id, max(sen_ids))
+                predicted, orig_deps = output[i].T, deps.T
+                for p in range(len(predicted)):
+                    sen_id = sen_ids[p] + offset
+                    output_orders[sen_id][heads[p]] = [orig_deps[p][f] for f in predicted[p]]
+            offset += max_id + 1
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
+        for t, tree in enumerate(trees):
+            new_linear_order = tree.get_linear_order(0, output_orders[t])
+            new_trees.append(tree.reorder_with_order(new_linear_order))
         for tree in new_trees:
             writer.write(tree.conll_str())
             writer.write('\n\n')
