@@ -25,7 +25,7 @@ if __name__ == '__main__':
     parser.add_option("--dropout", type="float", dest="dropout", default=0.33)
     parser.add_option("--dev_percent", type="int", dest="dev_percent", default=10)
     parser.add_option("--outdir", type="string", dest="outdir", default="results")
-    parser.add_option("--layer", type="int", dest="layer", default=2)
+    parser.add_option("--layer", type="int", dest="layer", default=3)
     parser.add_option("--dep_layer", type="int", dest="dep_layer", default=2)
     parser.add_option("--hdim", type="int", dest="hdim", default=200)
     parser.add_option("--phdim", type="int", dest="phdim", default=200)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
 (options, args) = parser.parse_args()
 if options.train_file:
     train_data, dev_data, relations = utils.split_data(options.train_file, options.train_t, options.dev_percent)
-    tags = utils.vocab(train_data)
+    words, tags, langs = utils.vocab(train_data, options.min_freq)
     max_len = max([len(d[1]) for d in train_data])
     min_len = min([len(d[1]) for d in train_data])
     buckets = [list() for i in range(min_len, max_len)]
@@ -56,15 +56,15 @@ if options.train_file:
         dev_buckets[0].append(d)
 
     with open(os.path.join(options.outdir, options.params), 'w') as paramsfp:
-        pickle.dump((tags, relations, options), paramsfp)
-    t = MT(options, tags, relations)
+        pickle.dump((words, tags, relations, langs, options), paramsfp)
+    t = MT(options, words, tags, relations, langs)
 
-    dev_dep_batches = utils.get_batches(dev_buckets, t, False)
+    dev_batches, dev_dep_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
     iter = 0
     for i in range(options.epoch):
-        train_dep_batches = utils.get_batches(buckets, t, True)
-        iter, dev_acc = t.train(train_dep_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
+        train_batches, train_dep_batches = utils.get_batches(buckets, t, True)
+        iter, dev_acc = t.train(train_batches, train_dep_batches, dev_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
         if dev_acc > best_dev:
             best_dev = dev_acc
             print 'saving', best_dev
@@ -72,14 +72,14 @@ if options.train_file:
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
-        tags, relations, stored_options = pickle.load(paramsfp)
+        words, tags, relations, langs, stored_options = pickle.load(paramsfp)
     stored_options.external_embedding = options.external_embedding
-    t = MT(stored_options, tags, relations)
+    t = MT(stored_options, words, tags, relations, langs)
     t.load(os.path.join(options.outdir, options.model))
     test_buckets = [list()]
     trees, test_data = utils.read_tree_as_data(options.test_file)
     for d in test_data:
         test_buckets[0].append(d)
     t.options.batch = options.batch
-    test_dep_batches = utils.get_batches(test_buckets, t, False)
-    t.reorder_tree(test_dep_batches, trees, options.output_file)
+    test_batches, test_dep_batches = utils.get_batches(test_buckets, t, False)
+    t.reorder_tree(test_batches, test_dep_batches, trees, options.output_file)

@@ -13,13 +13,19 @@ def normalize(word):
     return '<num>' if numberRegex.match(word) else ('<url>' if urlRegex.match(word) else word.lower())
 
 
-def vocab(train_data):
-    tags =  set()
+def vocab(train_data, min_count=2):
+    word_counts = defaultdict(int)
+    tags, relations, langs = set(), set(), set()
     for data in train_data:
         ws, ows, ts, lang_id = data[0]
+        for w in ws:
+            word_counts[w] += 1
+        for w in ows:
+            word_counts[w] += 1
         for t in ts:
             tags.add(t)
-    return list(tags)
+        langs.add(lang_id)
+    return [w for w in word_counts.keys() if word_counts[w] > min_count], list(tags), list(langs)
 
 
 def get_order_data(tree, h):
@@ -101,7 +107,7 @@ def get_batches(buckets, model, is_train):
     if is_train:
         for dc in d_copy:
             random.shuffle(dc)
-    dep_mini_batches = []
+    mini_batches, dep_mini_batches = [], []
     batch, cur_len = [], 0
     for dc in d_copy:
         for d in dc:
@@ -109,15 +115,42 @@ def get_batches(buckets, model, is_train):
                 batch.append(d)
                 cur_len = max(cur_len, len(d[0][0]))
             if cur_len * len(batch) >= model.options.batch:
+                add_to_minibatch(batch, cur_len, mini_batches, model)
                 add_to_dep_minibatch(batch, dep_mini_batches, model)
                 batch, cur_len = [], 0
 
     if len(batch)>0:
+        add_to_minibatch(batch, cur_len, mini_batches, model)
         add_to_dep_minibatch(batch, dep_mini_batches, model)
     if is_train:
-        random.shuffle(dep_mini_batches)
-    return dep_mini_batches
+        c = list(zip(mini_batches, dep_mini_batches))
+        random.shuffle(c)
+        mini_batches, dep_mini_batches = zip(*c)
+    return mini_batches, dep_mini_batches
 
+
+def add_to_minibatch(batch, cur_len, mini_batches, model):
+    words = np.array([np.array(
+        [model.w2int.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else model.w2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
+    pwords = np.array([np.array(
+        [model.evocab.get(batch[i][0][0][j], 0) if j < len(batch[i][0][0]) else 0 for i in
+         range(len(batch))]) for j in range(cur_len)])
+    orig_words = np.array([np.array(
+        [model.w2int.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else model.w2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
+    orig_pwords = np.array([np.array(
+        [model.evocab.get(batch[i][0][1][j], 0) if j < len(batch[i][0][1]) else 0 for i in
+         range(len(batch))]) for j in range(cur_len)])
+    pos = np.array([np.array(
+        [model.t2int.get(batch[i][0][2][j], 0) if j < len(batch[i][0][2]) else model.t2int[model.EOS] for i in
+         range(len(batch))]) for j in range(cur_len)])
+    langs = np.array([np.array(
+        [model.lang2int.get(batch[i][0][3], 0) for i in range(len(batch))]) for j in range(cur_len)])
+
+    sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
+    masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
+    mini_batches.append((words, pwords, orig_words, orig_pwords, pos, langs, sen_lens, masks))
 
 def add_to_dep_minibatch(batch, mini_batches, model):
     dep_mini_batch_length = defaultdict(list)
