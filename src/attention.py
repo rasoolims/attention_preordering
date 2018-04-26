@@ -134,7 +134,6 @@ class MT:
 
         outputs = []
         for length in dep_minibatch.keys():
-            print 'length', length
             sen_ids, heads, deps, labels, _, _, _ = dep_minibatch[length]
 
             in_embedding = [dy.lookup_batch(self.rlookup, labels[j]) for j in range(length)]
@@ -156,11 +155,8 @@ class MT:
                 w1dt = w1dt or self.attention_w1.expr() * input_mat
                 att_weights = self.attend(s, w1dt, True)
                 scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
-                print 'scores', scores
-                print 'mask', mask
                 scores = np.sum([scores, mask], axis=0)
                 next_positions = np.argmax(scores, axis=0)
-                print next_positions
                 next_labels = []
                 for i, position in enumerate(next_positions):
                     mask[position][i] = -float('inf')
