@@ -43,20 +43,18 @@ class MT:
         print 'Initialized with pre-trained embedding. Vector dimensions', edim, 'and', len(external_embedding), \
             'words, number of training words', len(self.w2int) + 2
 
-        input_dim = 2 * options.we + options.pe + options.le
+        input_dim = 2 * options.we + options.pe
         self.encoder_bilstm = dy.BiRNNBuilder(self.LSTM_NUM_OF_LAYERS, input_dim, options.hdim * 2, self.model, dy.VanillaLSTMBuilder)
-        dep_inp_dim = options.hdim * 2 + options.re
-        self.dep_encoder_bilstm = dy.BiRNNBuilder(self.DEP_LSTM_NUM_OF_LAYERS, dep_inp_dim, options.hdim * 2, self.model, dy.VanillaLSTMBuilder)
-
-        self.dec_lstm = dy.LSTMBuilder(self.DEP_LSTM_NUM_OF_LAYERS, dep_inp_dim + options.hdim * 2, options.phdim, self.model)
 
         self.wlookup = self.model.add_lookup_parameters((self.WVOCAB_SIZE, options.we))
         self.tlookup = self.model.add_lookup_parameters((self.TVOCAB_SIZE, options.pe))
         self.rlookup = self.model.add_lookup_parameters((len(self.rel2int)+2, options.re))
+        self.dir_lookup = self.model.add_lookup_parameters((2, 2))
         self.llookup = self.model.add_lookup_parameters((len(self.lang2int)+2, options.le))
-        self.attention_w1 = self.model.add_parameters((self.ATTENTION_SIZE, options.hdim * 2))
-        self.attention_w2 = self.model.add_parameters((self.ATTENTION_SIZE, options.phdim * self.DEP_LSTM_NUM_OF_LAYERS * 2))
-        self.attention_v = self.model.add_parameters((1, self.ATTENTION_SIZE))
+
+        self.H = self.model.add_parameters((options.hdim, options.hdim *  4 + options.re + options.le + 2))
+        self.HB = self.model.add_parameters((options.hdim, ), init = dy.ConstInitializer(0.2))
+        self.O = self.model.add_parameters((2,  options.hdim))
         self.trainer = dy.AdamTrainer(self.model, options.lr, options.beta1, options.beta2)
 
         def _emb_mask_generator(seq_len, batch_size):
@@ -81,12 +79,11 @@ class MT:
 
         self.generate_emb_mask = _emb_mask_generator
 
-    def embed_sentence(self, ws, pwords, ows, o_pwords, ts, langs):
+    def embed_sentence(self, ws, pwords, ows, o_pwords, ts):
         wembed = [dy.lookup_batch(self.wlookup, ws[i]) + dy.lookup_batch(self.elookup, pwords[i]) for i in range(len(ws))]
         owembed = [dy.lookup_batch(self.wlookup, ows[i]) + dy.lookup_batch(self.elookup, o_pwords[i]) for i in range(len(ows))]
         posembed = [dy.lookup_batch(self.tlookup, ts[i]) for i in range(len(ts))]
-        langembed = [dy.lookup_batch(self.llookup, langs[i]) for i in range(len(langs))]
-        return [dy.concatenate([wembed[i], posembed[i], owembed[i], langembed[i]]) for i in range(len(ts))]
+        return [dy.concatenate([wembed[i], posembed[i], owembed[i]]) for i in range(len(ts))]
 
     def encode_sentence(self, input_embeds):
         for fb, bb in self.encoder_bilstm.builder_layers:
@@ -95,112 +92,34 @@ class MT:
             input_embeds = [dy.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
         return input_embeds
 
-    def attend(self, state, w1dt, is_train):
-        # input_mat: (encoder_state x seqlen) => input vecs concatenated as cols
-        # w1dt: (attdim x seqlen)
-        # w2dt: (attdim x attdim)
-        w2dt = self.attention_w2.expr() * dy.concatenate(list(state.s()))
-        # if is_train:
-        #     w2dt = dy.dropout(w2dt, self.options.dropout)
-        # att_weights: (seqlen,) row vector
-        unnormalized = dy.transpose(self.attention_v.expr() * dy.tanh(dy.colwise_add(w1dt, w2dt)))
-        att_weights = dy.softmax(unnormalized) + dy.scalarInput(1e-12)
-        return att_weights
 
-    def decode(self, encoded, out_e, out_idx, length):
-        input_mat = dy.concatenate_cols(encoded)
-        w1dt = None
-
-        empty_tensor = dy.reshape(dy.inputTensor(np.zeros((self.options.hdim * 4 + self.options.re, len(out_idx[0])), dtype=float)),
-                                  (self.options.hdim * 4 + self.options.re,), len(out_idx[0]))
-        s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor]))
-        loss = []
-        for p in range(length):
-            # w1dt can be computed and cached once for the entire decoding phase
-            w1dt = w1dt or self.attention_w1.expr() * input_mat
-            att_weights = self.attend(s, w1dt, True)
-            vector = dy.concatenate([input_mat * att_weights, out_e[p]])
-            # vector = dy.dropout(vector, self.options.dropout)
-            s = s.add_input(vector)
-            loss_p = dy.pick_batch(-dy.log(att_weights), out_idx[p])
-            loss.append(dy.sum_batches(loss_p)/loss_p.dim()[1])
-        return loss
 
     def generate(self, minibatch, dep_minibatch):
-        words, pwords, orig_words, orig_pwords, tags, langs, sen_lens, masks = minibatch
-        embedded = self.embed_sentence(words, pwords, orig_words, orig_pwords, tags, langs)
-        encoded = self.encoder_bilstm.transduce(embedded)
-        sentence_embeddings = [dy.transpose(dy.reshape(e, (e.dim()[0][0], e.dim()[1]))) for e in encoded]
-
-        outputs = []
-        for length in dep_minibatch.keys():
-            sen_ids, heads, deps, labels, _, _, _ = dep_minibatch[length]
-
-            in_embedding = [dy.lookup_batch(self.rlookup, labels[j]) for j in range(length)]
-            in_se = [dy.concatenate_to_batch([sentence_embeddings[d][sen_ids[i]] for i, d in enumerate(deps[j])]) for j
-                     in range(length)]
-            input_embeddings = [dy.concatenate([l, s]) for l, s in zip(in_embedding, in_se)]
-            e = self.dep_encoder_bilstm.transduce(input_embeddings)
-            input_mat = dy.concatenate_cols(e)
-            w1dt = None
-
-            empty_tensor = dy.reshape(
-                dy.inputTensor(np.zeros((self.options.hdim * 4 + self.options.re, len(deps[0])), dtype=float)),
-                (self.options.hdim * 4 + self.options.re,), len(deps[0]))
-            s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor]))
-            mask = np.zeros((deps.shape[0], deps.shape[1]), dtype=float)
-            out = np.zeros((deps.shape[0], deps.shape[1]), dtype=int)
-            for p in range(length):
-                # w1dt can be computed and cached once for the entire decoding phase
-                w1dt = w1dt or self.attention_w1.expr() * input_mat
-                att_weights = self.attend(s, w1dt, True)
-                scores = (att_weights).npvalue().reshape((mask.shape[0], mask.shape[1]))
-                scores = np.sum([scores, mask], axis=0)
-                next_positions = np.argmax(scores, axis=0)
-                next_labels = []
-                for i, position in enumerate(next_positions):
-                    mask[position][i] = -float('inf')
-                    out[p][i] = position
-                    next_labels.append(labels[position][i])
-
-                out_embedding = dy.lookup_batch(self.rlookup, next_labels)
-                out_se = dy.concatenate_to_batch([sentence_embeddings[d][sen_ids[i]] for i, d in enumerate(next_positions)])
-                output_embeddings = dy.concatenate([out_embedding, out_se])
-                vector = dy.concatenate([input_mat * att_weights, output_embeddings])
-                # vector = dy.dropout(vector, self.options.dropout)
-                s = s.add_input(vector)
-            outputs.append(out)
+        output_values = self.decode(minibatch, dep_minibatch).npvalue()
+        outputs = np.argmax(output_values, axis=0)
         dy.renew_cg()
         return outputs
 
     def get_loss(self, minibatch, dep_minibatch):
-        words, pwords, orig_words, orig_pwords, tags, langs, sen_lens, masks = minibatch
-        embedded = self.embed_sentence(words, pwords, orig_words, orig_pwords, tags, langs)
+        output_layer = self.decode(minibatch, dep_minibatch)
+        loss = dy.pickneglogsoftmax_batch(output_layer, dep_minibatch[-1])
+        return loss
+
+    def decode(self, minibatch, dep_minibatch):
+        words, pwords, orig_words, orig_pwords, tags, sen_lens, masks = minibatch
+        embedded = self.embed_sentence(words, pwords, orig_words, orig_pwords, tags)
         encoded = self.encoder_bilstm.transduce(embedded)
         sentence_embeddings = [dy.transpose(dy.reshape(e, (e.dim()[0][0], e.dim()[1]))) for e in encoded]
-
-        losses = []
-        for length in dep_minibatch.keys():
-            sen_ids, heads, deps, labels, o_deps, o_labels, num_orders = dep_minibatch[length]
-
-            in_embedding = [dy.lookup_batch(self.rlookup, labels[j]) for j in range(length)]
-            out_embedding = [dy.lookup_batch(self.rlookup, o_labels[j]) for j in range(length)]
-            in_se = [dy.concatenate_to_batch([sentence_embeddings[d][sen_ids[i]] for i,d in enumerate(deps[j])]) for j in range(length)]
-            out_se = [dy.concatenate_to_batch([sentence_embeddings[d][sen_ids[i]] for i,d in enumerate(o_deps[j])]) for j in range(length)]
-
-            input_embeddings = [dy.concatenate([l, s]) for l, s in zip(in_embedding, in_se)]
-            output_embeddings = [dy.concatenate([l, s]) for l, s in zip(out_embedding, out_se)]
-
-            e = self.dep_encoder_bilstm.transduce(input_embeddings)
-            losses += self.decode(e, output_embeddings, num_orders, length)
-
-        return losses
-
-    def get_output_int(self, minibatch):
-        gen_out, masks = self.generate(minibatch), minibatch[-1]
-        out = [[gen_out[i][j] for j in range(1, len(gen_out[i])) if masks[j][i] == 1] for i in range(len(gen_out))]
-        out = [o[:-1] for o in out]
-        return out
+        sen_ids, heads, deps, labels, directions, langs, _ = dep_minibatch
+        rel_embedding = dy.lookup_batch(self.rlookup, labels)
+        lang_embedding = dy.lookup_batch(self.llookup, langs)
+        dir_embedding = dy.lookup_batch(self.dir_lookup, directions)
+        head_se = dy.concatenate_to_batch([sentence_embeddings[h][sen_ids[i]] for i, h in enumerate(heads)])
+        dep_se = dy.concatenate_to_batch([sentence_embeddings[d][sen_ids[i]] for i, d in enumerate(deps)])
+        input_layer = dy.concatenate([rel_embedding, dir_embedding, lang_embedding, head_se, dep_se])
+        h = dy.rectify(dy.affine_transform([self.HB.expr(), self.H.expr(), input_layer]))
+        output_layer = self.O.expr() * h
+        return output_layer
 
     def train(self, train_batches, train_dep_batches, dev_batches, dev_dep_batches, dev_out, t):
         start = time.time()
@@ -224,12 +143,10 @@ class MT:
 
         all_outputs, correct = 0, 0
         for di in range(len(dev_batches)):
-            output = self.generate(dev_batches[di], dev_dep_batches[di])
-            for i, length in enumerate(dev_dep_batches[di].keys()):
-                gold_orders = dev_dep_batches[di][length][-1].T
-                predicted = output[i].T
-                correct += np.sum(predicted == gold_orders)
-                all_outputs += predicted.shape[0] * predicted.shape[1]
+            outputs = self.generate(dev_batches[di], dev_dep_batches[di])
+            gold_orders = dev_dep_batches[di][-1]
+            correct += np.sum(outputs == gold_orders)
+            all_outputs += len(outputs)
             dy.renew_cg()
         dev_acc = round(float(100 * correct) / all_outputs, 2)
         print 'dev accuracy', dev_acc
@@ -249,23 +166,32 @@ class MT:
         print 'get new order'
         new_trees, t_num = [], 0
         offset = 0
-        output_orders = defaultdict(dict)
+        left_output_orders = defaultdict(dict)
+        right_output_orders = defaultdict(dict)
         for d in range(len(batches)):
             output = self.generate(batches[d], dep_batches[d])
-            max_id = 0
-            for i, length in enumerate(dep_batches[d].keys()):
-                sen_ids, heads, deps, labels, _, _, _ = dep_batches[d][length]
-                max_id = max(max_id, max(sen_ids))
-                predicted, orig_deps = output[i].T, deps.T
-                for p in range(len(predicted)):
-                    sen_id = sen_ids[p] + offset
-                    output_orders[sen_id][heads[p]] = [orig_deps[p][f] for f in predicted[p]]
+            sen_ids, heads, deps, labels, directions, langs, _ = dep_batches[d]
+            max_id = max(sen_ids)
+            predicted, orig_deps = output.T, deps.T
+            for p in range(len(predicted)):
+                sen_id = sen_ids[p] + offset
+                if not heads[p] in left_output_orders[sen_id]:
+                    left_output_orders[sen_id][heads[p]] = list()
+                    right_output_orders[sen_id][heads[p]] = list()
+                if predicted[p] == 0:
+                    left_output_orders[sen_id][heads[p]].append(deps[p])
+                else:
+                    right_output_orders[sen_id][heads[p]].append(deps[p])
+
             offset += max_id + 1
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
         sys.stdout.write(str(d) + '\n')
         for t, tree in enumerate(trees):
-            new_linear_order = tree.get_linear_order(0, output_orders[t])
+            output_order = dict()
+            for head in left_output_orders[t].keys():
+                output_order[head] = left_output_orders[t][head] + [head] + right_output_orders[t][head]
+            new_linear_order = tree.get_linear_order(0, output_order)
             new_trees.append(tree.reorder_with_order(new_linear_order))
         for tree in new_trees:
             writer.write(tree.conll_str())
@@ -273,7 +199,7 @@ class MT:
         writer.close()
 
     def backpropagate(self, loss):
-        loss = dy.esum(loss) / len(loss)
+        loss = dy.sum_batches(loss) / loss.dim()[1]
         loss_value = loss.value()
         loss.backward()
         self.trainer.update()

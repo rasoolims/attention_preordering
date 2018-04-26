@@ -46,6 +46,7 @@ def get_order_data(tree, h):
 
     return data
 
+
 def read_tree_as_data(tree_path):
     trees = DepTree.load_trees_from_conll_file(tree_path)
     data = []
@@ -60,10 +61,11 @@ def read_tree_as_data(tree_path):
         order = dict()
         for ord in order_data:
             head = ord[0]
-            deps, r_deps = ord[1], ord[1]
-            rels, r_rels = ord[2], ord[2]
-            num_order = [i for i in range(len(deps))]
-            order[head] = [deps, rels, r_deps, r_rels, num_order]
+            deps = [int(f) for f in ord[1] if int(f) != head]
+            direction = [0 if head > int(f) else 1 for f in ord[1] if int(f) != head]
+            rels = [f for f in ord[2] if f != 'HEAD']
+            langs = [tree.lang_id for f in ord[2] if f != 'HEAD']
+            order[head] = [deps, rels, direction, direction, langs]
 
         data.append((d, order))
     assert len(data) == len(trees)
@@ -81,14 +83,21 @@ def split_data(train_path, output_path, dev_percent):
         for ord in orders[i].strip().split('\n'):
             fields = ord.strip().split('\t')
             head = int(fields[0])
-            deps = [int(f) for f in fields[1].split(' ')]
-            rels = [f for f in fields[2].split(' ')]
-            r_deps = [int(f) for f in fields[3].split(' ')]
-            r_rels = [f for f in fields[4].split(' ')]
-            num_order = [int(f) for f in fields[5].split(' ')]
+            deps = [int(f) for f in fields[1].split(' ') if int(f) != head]
+            direction = [0 if head>int(f) else 1 for f in fields[1].split(' ') if int(f) != head]
+            rels = [f for f in fields[2].split(' ') if f != 'HEAD']
+            out_direction = []
+            langs = []
+            dir = 0
+            for f in fields[3].split(' '):
+                langs.append(trees[i].lang_id)
+                if int(f) == head:
+                    dir = 1
+                else:
+                    out_direction.append(dir)
             for rel in rels:
                 relations.add(rel)
-            order[head] = [deps, rels, r_deps, r_rels, num_order]
+            order[head] = [deps, rels, direction, out_direction, langs]
 
         words, orig_words, tags= trees[i].words, trees[i].lemmas, trees[i].tags
         ws = ['<EOS>'] + [normalize(words[j]) for j in range(len(words))] + ['<EOS>']
@@ -145,48 +154,27 @@ def add_to_minibatch(batch, cur_len, mini_batches, model):
     pos = np.array([np.array(
         [model.t2int.get(batch[i][0][2][j], 0) if j < len(batch[i][0][2]) else model.t2int[model.EOS] for i in
          range(len(batch))]) for j in range(cur_len)])
-    langs = np.array([np.array(
-        [model.lang2int.get(batch[i][0][3], 0) for i in range(len(batch))]) for j in range(cur_len)])
 
     sen_lens = [len(batch[i][0][0]) for i in range(len(batch))]
     masks = np.array([np.array([1 if 0 <= j < len(batch[i][0][0]) else 0 for i in range(len(batch))]) for j in range(cur_len)])
-    mini_batches.append((words, pwords, orig_words, orig_pwords, pos, langs, sen_lens, masks))
+    mini_batches.append((words, pwords, orig_words, orig_pwords, pos, sen_lens, masks))
+
 
 def add_to_dep_minibatch(batch, mini_batches, model):
-    dep_mini_batch_length = defaultdict(list)
+    sen_ids, heads, deps, labels, directions, langs, o_dirs = [], [], [], [], [], [], []
     for i in range(len(batch)):
         order_dic = batch[i][1]
         for head in order_dic.keys():
-            od, ol, ord, orl, numo = order_dic[head]
-            l = len(od)
-            dep_mini_batch_length[l].append((i, head, order_dic[head]))
-
-    dep_mini_batches = dict()
-    for l in dep_mini_batch_length.keys():
-        sen_ids = np.array([e[0] for e in dep_mini_batch_length[l]])
-        heads = np.array([e[1] for e in dep_mini_batch_length[l]])
-        deps = np.array([np.array([e[2][0][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
-        labels = np.array([np.array([model.rel2int.get(e[2][1][j], 0) for e in dep_mini_batch_length[l]]) for j in range(l)])
-        o_deps = np.array([np.array([e[2][2][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
-        o_labels = np.array([np.array([model.rel2int.get(e[2][3][j], 0) for e in dep_mini_batch_length[l]]) for j in range(l)])
-        num_orders = np.array([np.array([e[2][4][j] for e in dep_mini_batch_length[l]]) for j in range(l)])
-
-        dep_mini_batches[l] = sen_ids, heads, deps, labels, o_deps, o_labels, num_orders
-    mini_batches.append(dep_mini_batches)
-
-    #   heads, deps, labels, r_deps, r_labels, sen_ids, num_order = [], [], [], [], [], [], []
-    #   for i in range(len(batch)):
-    #     order_dic = batch[i][1]
-    #     for head in order_dic.keys():
-    #         heads.append(head)
-    #         sen_ids.append(i)
-    #         od, ol, ord, orl, numo = order_dic[head]
-    #         deps.append(od)
-    #         labels.append([model.rel2int.get(rel, 0) for rel in ol])
-    #         r_deps.append(ord)
-    #         r_labels.append([model.rel2int.get(rel, 0) for rel in orl])
-    #         num_order.append(numo)
-    # mini_batches.append((heads, deps, labels, r_deps, r_labels, sen_ids, num_order))
+            dps, r, dir, odir, lang = order_dic[head]
+            for j, d in enumerate(dps):
+                sen_ids.append(i)
+                heads.append(head)
+                deps.append(d)
+                labels.append(model.rel2int.get(r[j], 0))
+                langs.append(model.lang2int.get(lang[j], 0))
+                directions.append(dir[j])
+                o_dirs.append(odir[j])
+    mini_batches.append((np.array(sen_ids), np.array(heads), np.array(deps), np.array(labels), np.array(directions), np.array(langs), np.array(o_dirs)))
 
 
 def create_string_output_from_order(order_file, dev_file, outfile):
