@@ -149,8 +149,8 @@ class MT:
                 (self.options.hdim * 4 + self.options.re,), len(deps[0]))
             s = self.dec_lstm.initial_state().add_input(dy.concatenate([empty_tensor]))
             mask = np.zeros((deps.shape[0], deps.shape[1]), dtype=float)
-            out = np.zeros((4 * deps.shape[0], deps.shape[1]), dtype=int)
-            for p in range(3 * length):
+            out = np.zeros((deps.shape[0], deps.shape[1]), dtype=int)
+            for p in range(length):
                 # w1dt can be computed and cached once for the entire decoding phase
                 w1dt = w1dt or self.attention_w1.expr() * input_mat
                 att_weights = self.attend(s, w1dt, True)
@@ -159,7 +159,7 @@ class MT:
                 next_positions = np.argmax(scores, axis=0)
                 next_labels = []
                 for i, position in enumerate(next_positions):
-                    #mask[position][i] = -float('inf')
+                    mask[position][i] = -float('inf')
                     out[p][i] = position
                     next_labels.append(labels[position][i])
 
@@ -169,11 +169,6 @@ class MT:
                 vector = dy.concatenate([input_mat * att_weights, output_embeddings])
                 # vector = dy.dropout(vector, self.options.dropout)
                 s = s.add_input(vector)
-            for p in range(length):
-                next_positions = [p]*deps.shape[1]
-                for i, position in enumerate(next_positions):
-                    #mask[position][i] = -float('inf')
-                    out[p + 3*length][i] = position
             outputs.append(out)
         dy.renew_cg()
         return outputs
@@ -263,14 +258,8 @@ class MT:
                 max_id = max(max_id, max(sen_ids))
                 predicted, orig_deps = output[i].T, deps.T
                 for p in range(len(predicted)):
-                    final_predictions = []
-                    prd_set = set()
-                    for prd in predicted[p]:
-                        if not prd in prd_set:
-                            prd_set.add(prd)
-                            final_predictions.append(prd)
                     sen_id = sen_ids[p] + offset
-                    output_orders[sen_id][heads[p]] = [orig_deps[p][f] for f in final_predictions]
+                    output_orders[sen_id][heads[p]] = [orig_deps[p][f] for f in predicted[p]]
             offset += max_id + 1
             if (d + 1) % 100 == 0:
                 sys.stdout.write(str(d + 1) + '...')
