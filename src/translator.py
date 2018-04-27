@@ -1,5 +1,5 @@
 from optparse import OptionParser
-import utils, os, pickle
+import utils, os, pickle, sys
 from attention import MT
 
 if __name__ == '__main__':
@@ -62,13 +62,20 @@ if options.train_file:
     dev_batches, dev_dep_batches = utils.get_batches(dev_buckets, t, False)
     best_dev = 0
     iter = 0
+    no_improvement = 0
     for i in range(options.epoch):
         train_batches, train_dep_batches = utils.get_batches(buckets, t, True)
         iter, dev_acc = t.train(train_batches, train_dep_batches, dev_batches, dev_dep_batches, options.outdir+'/dev.out'+str(i+1), iter)
         if dev_acc > best_dev:
             best_dev = dev_acc
+            no_improvement = 0
             print 'saving', best_dev
             t.save(os.path.join(options.outdir, options.model))
+        else:
+            no_improvement += 1
+            if no_improvement >= 2:
+                print 'no improvement'
+                sys.exit(0)
 
 if options.test_file and options.output_file:
     with open(os.path.join(options.outdir, options.params), 'r') as paramsfp:
