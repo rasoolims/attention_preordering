@@ -21,8 +21,12 @@ class MT:
         self.TVOCAB_SIZE = len(self.int2t)
 
         self.ignore_deps_ids = set()
+        self.ignore_deps_ids.add(0)
+        self.ignore_deps_ids.add(1)
         for id in self.ignore_deps:
-            self.ignore_deps_ids.add(self.rel2int[id])
+            if id in self.rel2int:
+                self.ignore_deps_ids.add(self.rel2int[id])
+
 
         self.LSTM_NUM_OF_LAYERS = options.layer
         self.DEP_LSTM_NUM_OF_LAYERS = options.dep_layer
