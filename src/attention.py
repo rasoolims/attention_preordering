@@ -5,6 +5,7 @@ from collections import defaultdict
 
 class MT:
     def __init__(self, options, words, tags, relations, langs):
+        self.ignore_deps = set(['conj','cc','fixed','flat','compound','list','parataxis','orphan','goeswith','reparandum','punct','root','discourse','dep', '_','case','clf','det','mark'])
         self.EOS = "<EOS>"
         self.PAD = 1
         self.options = options
@@ -18,6 +19,10 @@ class MT:
         self.lang2int = {l: i + 2 for i, l in enumerate(langs)}
         self.WVOCAB_SIZE = len(self.int2w)
         self.TVOCAB_SIZE = len(self.int2t)
+
+        self.ignore_deps_ids = set()
+        for id in self.ignore_deps:
+            self.ignore_deps_ids.add(self.rel2int[id])
 
         self.LSTM_NUM_OF_LAYERS = options.layer
         self.DEP_LSTM_NUM_OF_LAYERS = options.dep_layer
@@ -166,6 +171,7 @@ class MT:
         print 'get new order'
         new_trees, t_num = [], 0
         offset = 0
+        num_ignored = 0
         left_output_orders = defaultdict(dict)
         right_output_orders = defaultdict(dict)
         for d in range(len(batches)):
@@ -178,6 +184,9 @@ class MT:
                 if not heads[p] in left_output_orders[sen_id]:
                     left_output_orders[sen_id][heads[p]] = list()
                     right_output_orders[sen_id][heads[p]] = list()
+                if labels[p] in self.ignore_deps_ids:
+                    predicted[p] = directions[p]
+                    num_ignored+= 1
                 if predicted[p] == 0:
                     left_output_orders[sen_id][heads[p]].append(deps[p])
                 else:
@@ -197,6 +206,7 @@ class MT:
             writer.write(tree.conll_str())
             writer.write('\n\n')
         writer.close()
+        print 'num_ignored', num_ignored
 
     def backpropagate(self, loss):
         loss = dy.sum_batches(loss) / loss.dim()[1]
